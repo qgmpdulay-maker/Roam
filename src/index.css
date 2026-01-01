@@ -1,0 +1,10 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+* { -webkit-tap-highlight-color: transparent; }
+.card { @apply bg-white rounded-2xl shadow-sm border border-neutral-200; }
+.icon-btn { @apply p-3 rounded-2xl bg-white border border-neutral-200 shadow-sm active:scale-95 transition; }
+.pill { @apply px-2 py-1 rounded-full text-xs font-medium; }

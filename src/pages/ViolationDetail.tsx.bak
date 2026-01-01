@@ -1,0 +1,256 @@
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
+
+type Violation = {
+  id: string;
+  image_url: string | null;
+  violation_type: string | null;
+  street_name: string | null;     // <- make sure this column exists (text, nullable)
+  vehicle_class: string | null;
+  timestamp: string | null;
+  status: string | null;
+  license_plate: string | null;   // <- new text column, default null
+};
+
+function cap(s?: string | null) {
+  if (!s) return "—";
+  return s
+    .toLowerCase()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function fmtDate(iso?: string | null) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return "—";
+  }
+}
+
+// Simple license plate rule: 3–10 chars of A-Z, 0–9, space, dash
+const PLATE_REGEX = /^[A-Z0-9 -]{3,10}$/i;
+
+export default function ViolationDetail() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [row, setRow] = useState<Violation | null>(null);
+  const [plate, setPlate] = useState("");
+
+  // Fetch the row
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      if (!id) return;
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("violations")
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (!isMounted) return;
+
+      if (error) {
+        console.error(error);
+        setError("Failed to load violation.");
+      } else {
+        setRow(data as Violation);
+        setPlate((data as Violation)?.license_plate ?? "");
+      }
+      setLoading(false);
+    }
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  const isResolved = useMemo(
+    () => row && row.status && row.status.toLowerCase() === "resolved",
+    [row]
+  );
+
+  const plateError = useMemo(() => {
+    if (!plate) return null;
+    return PLATE_REGEX.test(plate.trim())
+      ? null
+      : "Use 3–10 characters. Letters, numbers, spaces, and - only.";
+  }, [plate]);
+
+  async function handleResolve() {
+    setError(null);
+    if (!row) return;
+    const nextPlate = plate.trim().toUpperCase();
+
+    if (!nextPlate) {
+      setError("Please enter a license plate before resolving.");
+      return;
+    }
+    if (!PLATE_REGEX.test(nextPlate)) {
+      setError("Invalid license plate format. Please fix it and try again.");
+      return;
+    }
+
+    setSaving(true);
+    const { error: upErr, data } = await supabase
+      .from("violations")
+      .update({
+        license_plate: nextPlate,
+        status: "resolved",
+      })
+      .eq("id", row.id)
+      .select()
+      .single();
+
+    setSaving(false);
+
+    if (upErr) {
+      console.error(upErr);
+      setError("Failed to save. Check your connection and RLS policies.");
+      return;
+    }
+
+    // Optimistic UI update
+    setRow(data as Violation);
+    setPlate(nextPlate);
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen px-4 py-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="rounded-full px-4 py-2 border border-gray-300 text-sm"
+        >
+          Back
+        </button>
+        <div className="mt-6 text-sm text-gray-500">Loading violation…</div>
+      </div>
+    );
+  }
+
+  if (!row) {
+    return (
+      <div className="min-h-screen px-4 py-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="rounded-full px-4 py-2 border border-gray-300 text-sm"
+        >
+          Back
+        </button>
+        <div className="mt-6 text-sm text-red-600">
+          {error ?? "Violation not found."}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen px-4 py-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate(-1)}
+          className="rounded-full px-4 py-2 border border-gray-300 text-sm bg-white"
+        >
+          Back
+        </button>
+        <h1 className="text-lg font-semibold">Violation</h1>
+        <div className="w-[64px]" />
+      </div>
+
+      {/* Image */}
+      <div className="mt-4 overflow-hidden rounded-2xl">
+        {row.image_url ? (
+          <img
+            src={row.image_url}
+            alt="evidence"
+            className="w-full h-52 object-cover"
+          />
+        ) : (
+          <div className="w-full h-52 grid place-items-center bg-gray-100 text-gray-500 text-sm">
+            No Image
+          </div>
+        )}
+      </div>
+
+      {/* Info card */}
+      <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+        <FieldRow label="Type" value={cap(row.violation_type)} />
+        <FieldRow label="Street" value={row.street_name ?? "—"} />
+        <FieldRow label="Vehicle" value={cap(row.vehicle_class)} />
+        <FieldRow label="Timestamp" value={fmtDate(row.timestamp)} />
+        <FieldRow
+          label="Status"
+          value={cap(row.status)}
+          valueClass={
+            isResolved ? "text-green-600 font-medium" : "text-orange-600 font-medium"
+          }
+        />
+
+        {/* Plate input */}
+        <div className="mt-4">
+          <label className="block text-xs text-gray-500 mb-1">License Plate</label>
+          <input
+            value={plate}
+            onChange={(e) => setPlate(e.target.value)}
+            placeholder="e.g., ABC1234"
+            className={`w-full rounded-xl border p-3 text-sm ${
+              plateError ? "border-red-400 focus:ring-red-200" : "border-gray-300"
+            }`}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={10}
+          />
+          {plateError && (
+            <div className="mt-1 text-xs text-red-600">{plateError}</div>
+          )}
+        </div>
+
+        {error && (
+          <div className="mt-3 text-xs text-red-600">{error}</div>
+        )}
+      </div>
+
+      {/* Resolve button */}
+      <button
+        onClick={handleResolve}
+        disabled={saving || !!plateError || !plate.trim()}
+        className={`mt-4 w-full rounded-2xl px-4 py-4 text-white font-semibold transition
+          ${
+            saving || !!plateError || !plate.trim()
+              ? "bg-orange-300 cursor-not-allowed"
+              : "bg-orange-600 hover:bg-orange-700"
+          }`}
+      >
+        {saving ? "Saving…" : "Mark as Resolved"}
+      </button>
+    </div>
+  );
+}
+
+function FieldRow({
+  label,
+  value,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="py-3 border-b last:border-b-0 border-gray-100">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-gray-500">{label}</div>
+        <div className={`text-sm ${valueClass ?? ""}`}>{value}</div>
+      </div>
+    </div>
+  );
+}

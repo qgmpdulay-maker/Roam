@@ -68,7 +68,10 @@ export default function Violations() {
       })
       .subscribe();
     channelRef.current = ch;
-    return () => ch.unsubscribe();
+    return () => {
+      // call unsubscribe but do not return the Promise to keep the cleanup synchronous
+      void ch.unsubscribe();
+    };
   }, []);
 
   const filtered = useMemo(() => {

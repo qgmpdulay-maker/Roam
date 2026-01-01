@@ -33,7 +33,7 @@ export default function MFASetup() {
   async function verify() {
     try {
       setStatus('verifying'); setError('')
-      const { data, error } = await supabase.auth.mfa.verify({
+      const { data, error } = await (supabase.auth.mfa as any).verify({
         factorId,
         code: code.trim(),
       })

@@ -13,6 +13,10 @@ type Violation = {
   license_plate: string | null; // from violations table
   violator_name: string | null; // snapshot on violation
   violator_id: string | null;   // FK -> violators.id
+
+  // NEW (added in DB)
+  resolved_by?: string | null;
+  resolved_at?: string | null;
 };
 
 function cap(s?: string | null) {
@@ -65,9 +69,11 @@ export default function ViolationDetail() {
 
   useEffect(() => {
     let live = true;
+
     async function load() {
       if (!id) return;
       setLoading(true);
+
       const { data, error } = await supabase
         .from("violations")
         .select("*")
@@ -106,7 +112,7 @@ export default function ViolationDetail() {
             setPlate(normalizePlate(violator.license_plate));
           }
           setAddress(violator.address ?? "");
-          setContactNo((violator.contact_no ?? "").replace(/[^0-9]/g, "")); // keep digits only
+          setContactNo((violator.contact_no ?? "").replace(/[^0-9]/g, ""));
           setHasOrCr(Boolean(violator.has_orcr));
           setHasLicense(Boolean(violator.has_driver_license));
           setNote(violator.note ?? "");
@@ -115,7 +121,9 @@ export default function ViolationDetail() {
 
       setLoading(false);
     }
+
     load();
+
     return () => {
       live = false;
     };
@@ -148,7 +156,13 @@ export default function ViolationDetail() {
     setError(null);
     if (!row) return;
 
-    // 1. Validate and normalize plate
+    // Prevent re-resolving
+    if (row.status?.toLowerCase() === "resolved") {
+      setError("This violation is already resolved.");
+      return;
+    }
+
+    // 1) Validate and normalize plate
     const nextPlate = normalizePlate(plate).trim();
 
     if (!nextPlate) {
@@ -160,7 +174,7 @@ export default function ViolationDetail() {
       return;
     }
 
-    // 2. Validate contact number (optional, but if present must be valid)
+    // 2) Validate contact number (optional)
     const cleanedContact = contactNo ? contactNo.replace(/[^0-9]/g, "") : "";
     if (cleanedContact && !PHONE_REGEX.test(cleanedContact)) {
       setError(
@@ -177,6 +191,15 @@ export default function ViolationDetail() {
     setSaving(true);
 
     try {
+      // ✅ Get logged-in user for resolved_by
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      const user = authData?.user;
+
+      if (authErr || !user) {
+        setError("You must be logged in to resolve a violation.");
+        return;
+      }
+
       let violatorId = row.violator_id ?? null;
 
       // --------------------------------------------------
@@ -199,9 +222,7 @@ export default function ViolationDetail() {
 
         if (updateErr) {
           console.error("violators update error", updateErr);
-          setError(
-            `Failed to create or update violator record: ${updateErr.message}`
-          );
+          setError(`Failed to create or update violator record: ${updateErr.message}`);
           return;
         }
       } else {
@@ -214,9 +235,7 @@ export default function ViolationDetail() {
 
         if (findErr) {
           console.error("violators lookup error", findErr);
-          setError(
-            `Failed to create or update violator record: ${findErr.message}`
-          );
+          setError(`Failed to create or update violator record: ${findErr.message}`);
           return;
         }
 
@@ -237,9 +256,7 @@ export default function ViolationDetail() {
 
           if (updateErr) {
             console.error("violators update existing error", updateErr);
-            setError(
-              `Failed to create or update violator record: ${updateErr.message}`
-            );
+            setError(`Failed to create or update violator record: ${updateErr.message}`);
             return;
           }
         } else {
@@ -259,9 +276,7 @@ export default function ViolationDetail() {
 
           if (insertErr) {
             console.error("violators insert error", insertErr);
-            setError(
-              `Failed to create or update violator record: ${insertErr.message}`
-            );
+            setError(`Failed to create or update violator record: ${insertErr.message}`);
             return;
           }
 
@@ -270,7 +285,7 @@ export default function ViolationDetail() {
       }
 
       // --------------------------------------------------
-      // 4. UPDATE VIOLATION RECORD
+      // 4. UPDATE VIOLATION RECORD  ✅ resolved_by + resolved_at
       // --------------------------------------------------
       const { data: violationData, error: violationErr } = await supabase
         .from("violations")
@@ -279,6 +294,8 @@ export default function ViolationDetail() {
           violator_name: trimmedName,
           violator_id: violatorId,
           status: "resolved",
+          resolved_by: user.id,
+          resolved_at: new Date().toISOString(),
         })
         .eq("id", row.id)
         .select()
@@ -364,7 +381,9 @@ export default function ViolationDetail() {
           label="Status"
           value={cap(row.status)}
           valueClass={
-            isResolved ? "text-green-600 font-medium" : "text-orange-600 font-medium"
+            isResolved
+              ? "text-green-600 font-medium"
+              : "text-orange-600 font-medium"
           }
         />
 
@@ -518,17 +537,9 @@ export default function ViolationDetail() {
       {/* Single action button */}
       <button
         onClick={handleResolve}
-        disabled={
-          saving ||
-          !plate ||
-          !!plateError ||
-          (contactNo && !!contactError)
-        }
+        disabled={saving || !plate || !!plateError || (contactNo && !!contactError)}
         className={`mt-4 w-full rounded-2xl px-4 py-4 text-white font-semibold transition ${
-          saving ||
-          !plate ||
-          !!plateError ||
-          (contactNo && !!contactError)
+          saving || !plate || !!plateError || (contactNo && !!contactError)
             ? "bg-orange-300 cursor-not-allowed"
             : "bg-orange-600 hover:bg-orange-700"
         }`}

@@ -4,7 +4,9 @@ import { RouterProvider } from 'react-router-dom'
 import { router } from './router'
 import './index.css'
 import "leaflet/dist/leaflet.css";
+import { applyPrefs } from "@/lib/uiPrefs";
 
+applyPrefs();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -54,7 +54,7 @@ export default function Profile() {
   const [avatar, setAvatar] = useState("");
   const [street, setStreet] = useState("Unassigned");
 
-  // NEW: quick stats
+  // quick stats
   const [resolvedCount, setResolvedCount] = useState<number>(0);
   const [pendingOnMyStreetCount, setPendingOnMyStreetCount] = useState<number>(0);
   const [lastResolvedAt, setLastResolvedAt] = useState<string | null>(null);
@@ -84,7 +84,6 @@ export default function Profile() {
       setError("");
       setMsg("");
 
-      // Try by account_id first
       const byId = await supabase
         .from("desk_officers")
         .select("*")
@@ -100,7 +99,6 @@ export default function Profile() {
       let row = byId.data;
 
       if (!row) {
-        // Fallback by email (case-insensitive)
         const byEmail = await supabase
           .from("desk_officers")
           .select("*")
@@ -115,7 +113,6 @@ export default function Profile() {
 
         row = byEmail.data;
 
-        // If there is an email row with NULL account_id, claim it for this user
         if (row && !row.account_id) {
           const claim = await supabase
             .from("desk_officers")
@@ -125,7 +122,6 @@ export default function Profile() {
             .single<DeskOfficer>();
 
           if (claim.error) {
-            // If someone else raced & claimed it, just re-check by account_id
             const recheck = await supabase
               .from("desk_officers")
               .select("*")
@@ -153,13 +149,11 @@ export default function Profile() {
         return;
       }
 
-      // Bind to state
       setProfile(row);
       setFullName(row.full_name ?? "");
       setContact(row.contact_number ?? "");
       setAvatar(row.avatar_url ?? "");
       setStreet(row.street_assignment ?? "Unassigned");
-
       setLoading(false);
     })();
   }, [userId, authEmail]);
@@ -174,7 +168,6 @@ export default function Profile() {
       try {
         setStatsLoading(true);
 
-        // Resolved count (by this user)
         const { count: resolved, error: rErr } = await supabase
           .from("violations")
           .select("id", { count: "exact", head: true })
@@ -183,8 +176,6 @@ export default function Profile() {
 
         if (rErr) throw rErr;
 
-        // Pending on my assigned street (motivational workload)
-        // If street is "Unassigned", skip
         let pendingStreet = 0;
         if ((profile.street_assignment ?? "Unassigned") !== "Unassigned") {
           const { count: pending, error: pErr } = await supabase
@@ -197,7 +188,6 @@ export default function Profile() {
           pendingStreet = pending ?? 0;
         }
 
-        // Last resolved time
         const { data: lastRow, error: lErr } = await supabase
           .from("violations")
           .select("id,resolved_at,status")
@@ -214,10 +204,9 @@ export default function Profile() {
           setPendingOnMyStreetCount(pendingStreet);
           setLastResolvedAt(lastRow?.resolved_at ?? null);
         }
-      } catch (e: any) {
+      } catch (e) {
         console.error(e);
         if (!cancelled) {
-          // Don't block profile page if stats fail
           setResolvedCount(0);
           setPendingOnMyStreetCount(0);
           setLastResolvedAt(null);
@@ -280,9 +269,7 @@ export default function Profile() {
       if (upErr) throw upErr;
 
       const { data: pub } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
-      const url = pub.publicUrl;
-
-      setAvatar(url);
+      setAvatar(pub.publicUrl);
       setMsg("Avatar uploaded. Don’t forget to Save Changes.");
     } catch (err: any) {
       setError(err.message ?? "Upload failed.");
@@ -305,7 +292,6 @@ export default function Profile() {
   }
 
   const completeness = useMemo(() => {
-    // simple scoring: name, contact, avatar
     let score = 0;
     if (fullName.trim().length >= 2) score += 1;
     if (contact.trim().length >= 7) score += 1;
@@ -314,11 +300,11 @@ export default function Profile() {
     return { score, pct };
   }, [fullName, contact, avatar]);
 
-  if (loading) return <div className="p-4 text-sm text-gray-500">Loading profile…</div>;
+  if (loading) return <div className="page text-sm text-muted">Loading profile…</div>;
 
   if (!profile) {
     return (
-      <div className="p-4 space-y-3">
+      <div className="page space-y-3">
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-800">
           We couldn’t load your profile. Please contact an admin to add a row in{" "}
           <b>public.desk_officers</b>.
@@ -333,8 +319,8 @@ export default function Profile() {
   }
 
   return (
-    <div className="p-4 pb-24 space-y-4">
-      <h1 className="text-xl font-semibold">Profile</h1>
+    <div className="page space-y-4">
+      <h1 className="text-xl font-semibold text-main">Profile</h1>
 
       {msg && (
         <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-green-700">
@@ -347,55 +333,60 @@ export default function Profile() {
         </div>
       )}
 
-      {/* NEW: Quick stats */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+      {/* Quick stats */}
+      <div className="card p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm text-gray-600">Officer Performance</div>
-            <div className="text-xs text-gray-500">
+            <div className="text-sm text-sub">Officer Performance</div>
+            <div className="text-xs text-muted">
               {statsLoading ? "Updating…" : "Live from violations table"}
             </div>
           </div>
 
           <div className="text-right">
-            <div className="text-xs text-gray-500">Role</div>
-            <div className="text-sm font-semibold text-gray-900">Desk Officer</div>
+            <div className="text-xs text-muted">Role</div>
+            <div className="text-sm font-semibold text-main">Desk Officer</div>
           </div>
         </div>
 
         <div className="mt-3 grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">Resolved Violations</div>
-            <div className="text-2xl font-bold">{resolvedCount}</div>
+          <div className="rounded-xl border border-neutral-200 dark:border-gray-800 p-3 bg-white/70 dark:bg-gray-900/40">
+            <div className="text-xs text-muted">Resolved Violations</div>
+            <div className="text-2xl font-bold text-main">{resolvedCount}</div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">Pending Violations</div>
-            <div className="text-2xl font-bold">{pendingOnMyStreetCount}</div>
+          <div className="rounded-xl border border-neutral-200 dark:border-gray-800 p-3 bg-white/70 dark:bg-gray-900/40">
+            <div className="text-xs text-muted">Pending Violations</div>
+            <div className="text-2xl font-bold text-main">{pendingOnMyStreetCount}</div>
           </div>
 
-          <div className="rounded-xl border border-gray-200 p-3">
-            <div className="text-xs text-gray-500">Last resolved</div>
-            <div className="text-sm font-semibold">{fmtDateTime(lastResolvedAt)}</div>
+          <div className="rounded-xl border border-neutral-200 dark:border-gray-800 p-3 bg-white/70 dark:bg-gray-900/40">
+            <div className="text-xs text-muted">Last resolved</div>
+            <div className="text-sm font-semibold text-main">
+              {fmtDateTime(lastResolvedAt)}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Avatar card */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+      <div className="card p-4">
         <div className="flex items-center gap-4">
-          <div className="relative h-16 w-16 rounded-full bg-gray-100 border border-gray-200 overflow-hidden grid place-items-center text-lg font-semibold">
+          <div className="relative h-16 w-16 rounded-full bg-gray-100 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 overflow-hidden grid place-items-center text-lg font-semibold">
             {avatar ? (
               <img src={avatar} alt="avatar" className="h-full w-full object-cover" />
             ) : (
-              <span className="text-gray-500">{initials(fullName || authEmail)}</span>
+              <span className="text-gray-600 dark:text-gray-200">
+                {initials(fullName || authEmail)}
+              </span>
             )}
           </div>
 
           <div className="flex-1">
-            <div className="text-sm text-gray-600 mb-2">Profile Photo</div>
+            <div className="text-sm text-sub mb-2">Profile Photo</div>
+
             <div className="flex flex-wrap items-center gap-2">
-              <label className="cursor-pointer rounded-xl border border-gray-300 px-3 py-1.5 text-sm bg-white hover:bg-gray-50">
+              <label className="cursor-pointer rounded-xl border border-neutral-200 dark:border-gray-700 px-3 py-1.5 text-sm bg-white/70 hover:bg-white dark:bg-gray-900/40 dark:hover:bg-gray-800 text-main">
                 {uploading ? "Uploading…" : "Upload"}
                 <input
                   type="file"
@@ -405,13 +396,15 @@ export default function Profile() {
                   disabled={uploading}
                 />
               </label>
+
               <button
                 type="button"
                 onClick={removeAvatar}
-                className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm bg-white hover:bg-gray-50"
+                className="rounded-xl border border-neutral-200 dark:border-gray-700 px-3 py-1.5 text-sm bg-white/70 hover:bg-white dark:bg-gray-900/40 dark:hover:bg-gray-800 text-main"
               >
                 Remove
               </button>
+
               {avatar && (
                 <a
                   href={avatar}
@@ -424,13 +417,14 @@ export default function Profile() {
               )}
             </div>
 
-            {/* NEW: completeness */}
+            {/* completeness */}
             <div className="mt-3">
-              <div className="flex items-center justify-between text-[11px] text-gray-500">
+              <div className="flex items-center justify-between text-[11px] text-muted">
                 <span>Profile completeness</span>
                 <span>{completeness.pct}%</span>
               </div>
-              <div className="mt-1 h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+
+              <div className="mt-1 h-2 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-orange-600"
                   style={{ width: `${completeness.pct}%` }}
@@ -442,26 +436,21 @@ export default function Profile() {
       </div>
 
       {/* Details card */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
+      <div className="card p-4 space-y-3">
         <div>
-          <label className="block text-xs font-medium text-gray-500">Email</label>
-          <input value={profile.email ?? ""} readOnly className="mt-1 w-full rounded-xl border p-2.5 bg-gray-50" />
+          <label className="roam-label">Email</label>
+          <input value={profile.email ?? ""} readOnly className="roam-input mt-1 opacity-80" />
         </div>
 
-        {/* NEW: IDs row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-500">Officer ID</label>
+            <label className="roam-label">Officer ID</label>
             <div className="mt-1 flex gap-2">
-              <input
-                value={profile.id}
-                readOnly
-                className="w-full rounded-xl border p-2.5 bg-gray-50 text-xs"
-              />
+              <input value={profile.id} readOnly className="roam-input text-xs opacity-80" />
               <button
                 type="button"
                 onClick={() => copyToClipboard(profile.id)}
-                className="shrink-0 rounded-xl border border-gray-300 px-3 text-sm bg-white hover:bg-gray-50"
+                className="shrink-0 rounded-xl border border-neutral-200 dark:border-gray-700 px-3 text-sm bg-white/70 hover:bg-white dark:bg-gray-900/40 dark:hover:bg-gray-800 text-main"
               >
                 Copy
               </button>
@@ -469,17 +458,17 @@ export default function Profile() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-500">Account ID</label>
+            <label className="roam-label">Account ID</label>
             <div className="mt-1 flex gap-2">
               <input
                 value={profile.account_id ?? userId ?? ""}
                 readOnly
-                className="w-full rounded-xl border p-2.5 bg-gray-50 text-xs"
+                className="roam-input text-xs opacity-80"
               />
               <button
                 type="button"
                 onClick={() => copyToClipboard(profile.account_id ?? userId ?? "")}
-                className="shrink-0 rounded-xl border border-gray-300 px-3 text-sm bg-white hover:bg-gray-50"
+                className="shrink-0 rounded-xl border border-neutral-200 dark:border-gray-700 px-3 text-sm bg-white/70 hover:bg-white dark:bg-gray-900/40 dark:hover:bg-gray-800 text-main"
               >
                 Copy
               </button>
@@ -487,38 +476,38 @@ export default function Profile() {
           </div>
         </div>
 
-        {/* NEW: joined date */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-500">Joined</label>
+            <label className="roam-label">Joined</label>
             <input
               value={fmtDate(profile.created_at)}
               readOnly
-              className="mt-1 w-full rounded-xl border p-2.5 bg-gray-50"
+              className="roam-input mt-1 opacity-80"
             />
           </div>
+
           <div>
-            <label className="block text-xs font-medium text-gray-500">Assigned Street (admin-set)</label>
-            <input value={street} readOnly className="mt-1 w-full rounded-xl border p-2.5 bg-gray-50" />
+            <label className="roam-label">Assigned Street (admin-set)</label>
+            <input value={street} readOnly className="roam-input mt-1 opacity-80" />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-500">Full Name</label>
+          <label className="roam-label">Full Name</label>
           <input
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="mt-1 w-full rounded-xl border p-2.5"
+            className="roam-input mt-1"
             placeholder="Juan Dela Cruz"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-500">Contact Number</label>
+          <label className="roam-label">Contact Number</label>
           <input
             value={contact}
             onChange={(e) => setContact(e.target.value)}
-            className="mt-1 w-full rounded-xl border p-2.5"
+            className="roam-input mt-1"
             placeholder="09xxxxxxxxx"
           />
         </div>
@@ -527,7 +516,7 @@ export default function Profile() {
           type="button"
           onClick={save}
           disabled={saving}
-          className="w-full rounded-2xl bg-orange-600 py-2.5 text-white font-semibold active:bg-orange-700 disabled:opacity-50"
+          className="w-full rounded-2xl bg-orange-600 py-3 text-white font-semibold active:bg-orange-700 disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save Changes"}
         </button>

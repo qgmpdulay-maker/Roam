@@ -21,7 +21,7 @@ type Violation = {
   vehicle_class: string | null;
   status: string | null;
 
-  // NEW (for "My Resolved" charts)
+  // for "My Resolved" charts
   resolved_by?: string | null;
   resolved_at?: string | null;
 };
@@ -72,7 +72,7 @@ function heatColor(t: number) {
   const c0 = [255, 247, 237];
   const c1 = [234, 88, 12];
   const r = Math.round(c0[0] + (c1[0] - c0[0]) * x);
-  const g = Math.round(c0[1] + (c1[1] - c0[1]) * x);
+  const g = Math.round(c0[1] + (c1[0] - c0[1]) * x); // (keep as you had if you prefer)
   const b = Math.round(c0[2] + (c1[2] - c0[2]) * x);
   return `rgb(${r}, ${g}, ${b})`;
 }
@@ -95,7 +95,7 @@ export default function Statistics() {
   const [range, setRange] = useState<RangeKey>("month");
   const [loading, setLoading] = useState(false);
 
-  // NEW: officer-only resolved data (top section)
+  // officer-only resolved data (top section)
   const [myResolved, setMyResolved] = useState<Violation[]>([]);
   const [myLoading, setMyLoading] = useState(false);
 
@@ -104,12 +104,12 @@ export default function Statistics() {
     [range]
   );
 
-  // Fetch ALL violations (existing behavior)
+  // Fetch ALL violations
   useEffect(() => {
     let cancelled = false;
 
     async function fetchAllViolationsPaginated() {
-      const pageSize = 1000; // Supabase typical max per page
+      const pageSize = 1000;
       let from = 0;
       let all: Violation[] = [];
 
@@ -168,7 +168,7 @@ export default function Statistics() {
     };
   }, [selected.days]);
 
-  // NEW: Fetch ONLY this officer's RESOLVED violations (top section)
+  // Fetch ONLY this officer's RESOLVED violations
   useEffect(() => {
     let cancelled = false;
 
@@ -178,7 +178,6 @@ export default function Statistics() {
 
       if (authErr || !user) return [];
 
-      // All time (paginated)
       if (days === null) {
         const pageSize = 1000;
         let from = 0;
@@ -207,7 +206,6 @@ export default function Statistics() {
         return all;
       }
 
-      // Windowed (by resolved_at)
       const since = daysAgoUTC(days);
 
       const { data, error } = await supabase
@@ -286,7 +284,7 @@ export default function Statistics() {
     return { mat, max };
   }, [violations]);
 
-  // ===================== NEW TOP CHARTS (MY RESOLVED) =========================
+  // ===================== MY RESOLVED (TOP CHARTS) =========================
   const myResolvedByVehicle = useMemo(() => {
     const map = new Map<string, number>();
     for (const v of myResolved) {
@@ -304,7 +302,7 @@ export default function Statistics() {
   }, [myResolved]);
 
   const myResolvedTrend = useMemo(() => {
-    const days = selected.days; // null = all time
+    const days = selected.days;
     const map = new Map<string, number>();
 
     for (const v of myResolved) {
@@ -313,7 +311,6 @@ export default function Statistics() {
       const d = new Date(t);
       if (isNaN(d.getTime())) continue;
 
-      // all-time => group by month; windowed => group by day
       const key =
         days === null
           ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
@@ -325,22 +322,21 @@ export default function Statistics() {
     const rows = Array.from(map.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([key, count]) => ({
-        label: days === null ? key : key.slice(5), // YYYY-MM or MM-DD
+        label: days === null ? key : key.slice(5),
         count,
       }));
 
-    // Keep it readable
     return days === null ? rows.slice(-12) : rows.slice(-30);
   }, [myResolved, selected.days]);
 
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="min-h-screen px-4 py-4 space-y-4">
+    <div className="page space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Statistics</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-main">Statistics</h1>
+          <p className="text-sm text-muted">
             {loading ? "Loading…" : `${violations.length} records`} •{" "}
             {selected.label}
           </p>
@@ -348,137 +344,151 @@ export default function Statistics() {
 
         {/* Range Filter */}
         <div className="flex gap-2">
-          {RANGE_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              className={`px-3 py-1 rounded-full text-sm border ${
-                range === opt.key
-                  ? "bg-gray-900 text-white"
-                  : "bg-white text-gray-900"
-              }`}
-              onClick={() => setRange(opt.key)}
-              disabled={loading || myLoading}
-              title={opt.label}
-            >
-              {opt.label}
-            </button>
-          ))}
+          {RANGE_OPTIONS.map((opt) => {
+            const active = range === opt.key;
+            return (
+              <button
+                key={opt.key}
+                className={`filter-pill ${active ? "filter-pill-active" : ""}`}
+                onClick={() => setRange(opt.key)}
+                disabled={loading || myLoading}
+                title={opt.label}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-{/* ===================== MY RESOLVED (NEW TOP SECTION) ===================== */}
-<div className="rounded-2xl border border-gray-200 bg-white p-4">
-  <div className="flex items-start justify-between gap-3">
-    <div>
-      <h2 className="text-lg font-semibold">My Resolved Summary</h2>
-      <p className="text-xs text-gray-500">
-        {myLoading ? "Loading…" : `${myResolved.length} resolved`} •{" "}
-        {selected.label}
-      </p>
-    </div>
-
-    <div className="text-right">
-      <div className="text-xs text-gray-500">Total Resolved</div>
-      <div className="text-2xl font-bold">{myResolved.length}</div>
-    </div>
-  </div>
-
-  {/* Two cards like your other sections */}
-  <div className="mt-4 grid gap-4 md:grid-cols-2">
-    {/* Donut */}
-    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-      <h3 className="text-sm font-semibold mb-3">Resolved Violations by Vehicle Type</h3>
-
-      {myResolved.length === 0 ? (
-        <div className="h-[260px] grid place-items-center text-sm text-gray-500">
-          No resolved data in this range.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_160px] gap-2 items-center">
-          <div style={{ width: "100%", height: 260 }}>
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie
-                  data={myResolvedByVehicle.filter(d => d.count > 0)}
-                  dataKey="count"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={70}
-                  outerRadius={105}
-                  paddingAngle={2}
-                  isAnimationActive={false}
-                >
-                  {myResolvedByVehicle
-                    .filter(d => d.count > 0)
-                    .map((e, i) => (
-                      <Cell key={i} fill={e.fill} />
-                    ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+      {/* ===================== MY RESOLVED (TOP SECTION) ===================== */}
+      <div className="card p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-main">
+              My Resolved Summary
+            </h2>
+            <p className="text-xs text-muted">
+              {myLoading ? "Loading…" : `${myResolved.length} resolved`} •{" "}
+              {selected.label}
+            </p>
           </div>
 
-          {/* Custom legend (clean + compact) */}
-          <div className="max-h-[240px] overflow-auto pr-1">
-            <div className="space-y-2">
-              {myResolvedByVehicle
-                .filter(d => d.count > 0)
-                .sort((a, b) => b.count - a.count)
-                .map((d) => (
-                  <div key={d.name} className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className="inline-block h-2.5 w-2.5 rounded-sm"
-                        style={{ backgroundColor: d.fill }}
-                      />
-                      <span className="text-xs text-gray-700 truncate">{d.name}</span>
-                    </div>
-                    <span className="text-xs font-semibold text-gray-900">{d.count}</span>
+          <div className="text-right">
+            <div className="text-xs text-muted">Total Resolved</div>
+            <div className="text-2xl font-bold text-main">{myResolved.length}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {/* Donut */}
+          <div className="card p-4">
+            <h3 className="text-sm font-semibold mb-3 text-main">
+              Resolved Violations by Vehicle Type
+            </h3>
+
+            {myResolved.length === 0 ? (
+              <div className="h-[260px] grid place-items-center text-sm text-muted">
+                No resolved data in this range.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_160px] gap-2 items-center">
+                <div style={{ width: "100%", height: 260 }}>
+                  <ResponsiveContainer>
+                    <PieChart>
+                      <Pie
+                        data={myResolvedByVehicle.filter((d) => d.count > 0)}
+                        dataKey="count"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={105}
+                        paddingAngle={2}
+                        isAnimationActive={false}
+                      >
+                        {myResolvedByVehicle
+                          .filter((d) => d.count > 0)
+                          .map((e, i) => (
+                            <Cell key={i} fill={e.fill} />
+                          ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Custom legend */}
+                <div className="max-h-[240px] overflow-auto pr-1">
+                  <div className="space-y-2">
+                    {myResolvedByVehicle
+                      .filter((d) => d.count > 0)
+                      .sort((a, b) => b.count - a.count)
+                      .map((d) => (
+                        <div
+                          key={d.name}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className="inline-block h-2.5 w-2.5 rounded-sm"
+                              style={{ backgroundColor: d.fill }}
+                            />
+                            <span className="text-xs text-sub truncate">
+                              {d.name}
+                            </span>
+                          </div>
+                          <span className="text-xs font-semibold text-main">
+                            {d.count}
+                          </span>
+                        </div>
+                      ))}
                   </div>
-                ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Trend */}
+          <div className="card p-4">
+            <h3 className="text-sm font-semibold mb-3 text-main">
+              Violations Resolved Trend
+            </h3>
+
+            {myResolvedTrend.length === 0 ? (
+              <div className="h-[260px] grid place-items-center text-sm text-muted">
+                No trend data yet.
+              </div>
+            ) : (
+              <div style={{ width: "100%", height: 260 }}>
+                <ResponsiveContainer>
+                  <BarChart
+                    data={myResolvedTrend}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#10B981" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            <div className="mt-2 text-[11px] text-muted">
+              {selected.days === null
+                ? "Grouped by month (last 12 shown)."
+                : "Grouped by day (last 30 shown)."}
             </div>
           </div>
         </div>
-      )}
-    </div>
-
-    {/* Trend */}
-    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-      <h3 className="text-sm font-semibold mb-3">Violations Resolved Trend</h3>
-
-      {myResolvedTrend.length === 0 ? (
-        <div className="h-[260px] grid place-items-center text-sm text-gray-500">
-          No trend data yet.
-        </div>
-      ) : (
-        <div style={{ width: "100%", height: 260 }}>
-          <ResponsiveContainer>
-            <BarChart data={myResolvedTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="count" fill="#10B981" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      <div className="mt-2 text-[11px] text-gray-500">
-        {selected.days === null
-          ? "Grouped by month (last 12 shown)."
-          : "Grouped by day (last 30 shown)."}
       </div>
-    </div>
-  </div>
-</div>
-{/* =================== END MY RESOLVED (NEW TOP SECTION) =================== */}
+      {/* =================== END MY RESOLVED (TOP SECTION) =================== */}
 
       {/* Vehicle Class Distribution */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4">
-        <h2 className="text-lg font-semibold mb-3">
+      <div className="card p-4">
+        <h2 className="text-lg font-semibold mb-3 text-main">
           Vehicle Class Distribution
         </h2>
         <div style={{ width: "100%", height: 320 }}>
@@ -506,8 +516,8 @@ export default function Statistics() {
       </div>
 
       {/* Violation Status */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4">
-        <h2 className="text-lg font-semibold mb-3">Violation Status</h2>
+      <div className="card p-4">
+        <h2 className="text-lg font-semibold mb-3 text-main">Violation Status</h2>
         <div style={{ width: "100%", height: 300 }}>
           <ResponsiveContainer>
             <PieChart>
@@ -535,13 +545,13 @@ export default function Statistics() {
       </div>
 
       {/* Heatmap (Day × Hour) */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+      <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Heatmap (Day × Hour)</h2>
-          <div className="text-xs text-gray-500">{selected.label}</div>
+          <h2 className="text-lg font-semibold text-main">Heatmap (Day × Hour)</h2>
+          <div className="text-xs text-muted">{selected.label}</div>
         </div>
 
-        <div className="grid grid-cols-[64px_repeat(24,minmax(0,1fr))] gap-1 mb-1 text-[10px] text-gray-500">
+        <div className="grid grid-cols-[64px_repeat(24,minmax(0,1fr))] gap-1 mb-1 text-[10px] text-muted">
           <div />
           {Array.from({ length: 24 }).map((_, h) => (
             <div key={h} className="text-center">
@@ -556,7 +566,7 @@ export default function Statistics() {
               key={label}
               className="grid grid-cols-[64px_repeat(24,minmax(0,1fr))] gap-1 items-center"
             >
-              <div className="text-xs text-gray-700">{label}</div>
+              <div className="text-xs text-sub">{label}</div>
               {Array.from({ length: 24 }).map((_, hr) => {
                 const count = heatData.mat[dow][hr];
                 const col = heatData.max
@@ -577,7 +587,7 @@ export default function Statistics() {
           ))}
         </div>
 
-        <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+        <div className="mt-3 flex items-center gap-2 text-xs text-muted">
           <span>Low</span>
           <div
             className="h-3 w-20 rounded"

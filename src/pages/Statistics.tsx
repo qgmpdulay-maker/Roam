@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
   ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
   YAxis,
   CartesianGrid,
+  Tooltip,
+  Cell,
 } from "recharts";
 
 // --- Types -------------------------------------------------------------------
@@ -20,6 +17,9 @@ type Violation = {
   timestamp: string | null;
   vehicle_class: string | null;
   status: string | null;
+
+  // ✅ Street column in your DB is commonly "street_name"
+  street_name?: string | null;
 
   // for "My Resolved" charts
   resolved_by?: string | null;
@@ -49,15 +49,20 @@ const VEHICLE_COLORS: Record<string, string> = {
   van: "#2563EB",
 };
 
+const STATUS_COLORS: Record<string, string> = {
+  pending: "#F59E0B",
+  resolved: "#10B981",
+  unknown: "#9CA3AF",
+};
+
 function colorForClass(c?: string) {
   const key = (c || "").toLowerCase();
   return VEHICLE_COLORS[key] ?? "#9CA3AF";
 }
 
-function daysAgoUTC(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString();
+function colorForStatus(s?: string) {
+  const key = (s || "unknown").toLowerCase();
+  return STATUS_COLORS[key] ?? "#9CA3AF";
 }
 
 function toLocal(dateISO: string | null) {
@@ -72,43 +77,109 @@ function heatColor(t: number) {
   const c0 = [255, 247, 237];
   const c1 = [234, 88, 12];
   const r = Math.round(c0[0] + (c1[0] - c0[0]) * x);
-  const g = Math.round(c0[1] + (c1[0] - c0[1]) * x); // (keep as you had if you prefer)
+  const g = Math.round(c0[1] + (c1[1] - c0[1]) * x);
   const b = Math.round(c0[2] + (c1[2] - c0[2]) * x);
   return `rgb(${r}, ${g}, ${b})`;
 }
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-// Range options
-type RangeKey = "all" | "year" | "month" | "week";
+function fmtRangeLabel(startISO: string | null, endISO: string | null) {
+  if (!startISO || !endISO) return "All time";
+  const s = new Date(startISO);
+  const e = new Date(endISO);
+  const ok = !isNaN(s.getTime()) && !isNaN(e.getTime());
+  if (!ok) return "All time";
+  return `${s.toLocaleDateString()} – ${e.toLocaleDateString()}`;
+}
 
-const RANGE_OPTIONS: { key: RangeKey; label: string; days: number | null }[] = [
-  { key: "all", label: "All time", days: null },
-  { key: "year", label: "1 year", days: 365 },
-  { key: "month", label: "30 days", days: 30 },
-  { key: "week", label: "7 days", days: 7 },
-];
+function dateToStartISO(yyyy_mm_dd: string) {
+  const d = new Date(`${yyyy_mm_dd}T00:00:00`);
+  return d.toISOString();
+}
+
+function dateToEndISO(yyyy_mm_dd: string) {
+  const d = new Date(`${yyyy_mm_dd}T23:59:59.999`);
+  return d.toISOString();
+}
+
+function daysBetween(startISO: string, endISO: string) {
+  const s = new Date(startISO).getTime();
+  const e = new Date(endISO).getTime();
+  if (isNaN(s) || isNaN(e)) return 0;
+  return Math.max(0, Math.round((e - s) / (1000 * 60 * 60 * 24)));
+}
 
 // --- Component ---------------------------------------------------------------
 export default function Statistics() {
   const [violations, setViolations] = useState<Violation[]>([]);
-  const [range, setRange] = useState<RangeKey>("month");
   const [loading, setLoading] = useState(false);
 
   // officer-only resolved data (top section)
   const [myResolved, setMyResolved] = useState<Violation[]>([]);
   const [myLoading, setMyLoading] = useState(false);
 
-  const selected = useMemo(
-    () => RANGE_OPTIONS.find((r) => r.key === range)!,
-    [range]
+  // Date filter UI (yyyy-mm-dd)
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [appliedStartISO, setAppliedStartISO] = useState<string | null>(null);
+  const [appliedEndISO, setAppliedEndISO] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string>("");
+
+  // default: last 30 days
+  useEffect(() => {
+    const today = new Date();
+    const end = today.toISOString().slice(0, 10);
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    const start = d.toISOString().slice(0, 10);
+
+    setStartDate(start);
+    setEndDate(end);
+
+    setAppliedStartISO(dateToStartISO(start));
+    setAppliedEndISO(dateToEndISO(end));
+  }, []);
+
+  function onApplyDates() {
+    setDateError("");
+
+    if (!startDate || !endDate) {
+      setAppliedStartISO(null);
+      setAppliedEndISO(null);
+      return;
+    }
+
+    if (startDate > endDate) {
+      setDateError("Start date must be before end date.");
+      return;
+    }
+
+    setAppliedStartISO(dateToStartISO(startDate));
+    setAppliedEndISO(dateToEndISO(endDate));
+  }
+
+  function onClearDates() {
+    setDateError("");
+    setStartDate("");
+    setEndDate("");
+    setAppliedStartISO(null);
+    setAppliedEndISO(null);
+  }
+
+  const rangeLabel = useMemo(
+    () => fmtRangeLabel(appliedStartISO, appliedEndISO),
+    [appliedStartISO, appliedEndISO]
   );
 
-  // Fetch ALL violations
+  // Fetch ALL violations (filtered by timestamp, paginated)
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchAllViolationsPaginated() {
+    async function fetchAllViolationsPaginated(
+      startISO: string | null,
+      endISO: string | null
+    ) {
       const pageSize = 1000;
       let from = 0;
       let all: Violation[] = [];
@@ -116,12 +187,16 @@ export default function Statistics() {
       while (true) {
         const to = from + pageSize - 1;
 
-        const { data, error } = await supabase
+        let q = supabase
           .from("violations")
-          .select("id,timestamp,vehicle_class,status")
+          .select("id,timestamp,vehicle_class,status,street_name")
           .order("timestamp", { ascending: true })
           .range(from, to);
 
+        if (startISO) q = q.gte("timestamp", startISO);
+        if (endISO) q = q.lte("timestamp", endISO);
+
+        const { data, error } = await q;
         if (error) throw error;
 
         const batch = (data ?? []) as Violation[];
@@ -134,30 +209,14 @@ export default function Statistics() {
       return all;
     }
 
-    async function fetchWindowed(days: number) {
-      const since = daysAgoUTC(days);
-      const { data, error } = await supabase
-        .from("violations")
-        .select("id,timestamp,vehicle_class,status")
-        .gte("timestamp", since)
-        .order("timestamp", { ascending: true });
-
-      if (error) throw error;
-      return (data ?? []) as Violation[];
-    }
-
     (async () => {
       try {
         setLoading(true);
-
-        const rows =
-          selected.days === null
-            ? await fetchAllViolationsPaginated()
-            : await fetchWindowed(selected.days);
-
+        const rows = await fetchAllViolationsPaginated(appliedStartISO, appliedEndISO);
         if (!cancelled) setViolations(rows);
       } catch (e) {
         console.error(e);
+        if (!cancelled) setViolations([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -166,64 +225,55 @@ export default function Statistics() {
     return () => {
       cancelled = true;
     };
-  }, [selected.days]);
+  }, [appliedStartISO, appliedEndISO]);
 
-  // Fetch ONLY this officer's RESOLVED violations
+  // Fetch ONLY this officer's RESOLVED violations (filtered by resolved_at)
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchMyResolved(days: number | null) {
+    async function fetchMyResolvedPaginated(
+      startISO: string | null,
+      endISO: string | null
+    ) {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
       const user = authData?.user;
-
       if (authErr || !user) return [];
 
-      if (days === null) {
-        const pageSize = 1000;
-        let from = 0;
-        let all: Violation[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      let all: Violation[] = [];
 
-        while (true) {
-          const to = from + pageSize - 1;
+      while (true) {
+        const to = from + pageSize - 1;
 
-          const { data, error } = await supabase
-            .from("violations")
-            .select("id,resolved_at,resolved_by,vehicle_class,status,timestamp")
-            .eq("resolved_by", user.id)
-            .eq("status", "resolved")
-            .order("resolved_at", { ascending: true })
-            .range(from, to);
+        let q = supabase
+          .from("violations")
+          .select("id,resolved_at,resolved_by,vehicle_class,status,timestamp,street_name")
+          .eq("resolved_by", user.id)
+          .eq("status", "resolved")
+          .order("resolved_at", { ascending: true })
+          .range(from, to);
 
-          if (error) throw error;
+        if (startISO) q = q.gte("resolved_at", startISO);
+        if (endISO) q = q.lte("resolved_at", endISO);
 
-          const batch = (data ?? []) as Violation[];
-          all = all.concat(batch);
+        const { data, error } = await q;
+        if (error) throw error;
 
-          if (batch.length < pageSize) break;
-          from += pageSize;
-        }
+        const batch = (data ?? []) as Violation[];
+        all = all.concat(batch);
 
-        return all;
+        if (batch.length < pageSize) break;
+        from += pageSize;
       }
 
-      const since = daysAgoUTC(days);
-
-      const { data, error } = await supabase
-        .from("violations")
-        .select("id,resolved_at,resolved_by,vehicle_class,status,timestamp")
-        .eq("resolved_by", user.id)
-        .eq("status", "resolved")
-        .gte("resolved_at", since)
-        .order("resolved_at", { ascending: true });
-
-      if (error) throw error;
-      return (data ?? []) as Violation[];
+      return all;
     }
 
     (async () => {
       try {
         setMyLoading(true);
-        const rows = await fetchMyResolved(selected.days);
+        const rows = await fetchMyResolvedPaginated(appliedStartISO, appliedEndISO);
         if (!cancelled) setMyResolved(rows);
       } catch (e) {
         console.error(e);
@@ -236,9 +286,9 @@ export default function Statistics() {
     return () => {
       cancelled = true;
     };
-  }, [selected.days]);
+  }, [appliedStartISO, appliedEndISO]);
 
-  // --- Vehicle Class Distribution (Donut) ------------------------------------
+  // --- Vehicle Class Distribution (BAR DATA) ---------------------------------
   const classCounts = useMemo(() => {
     const map = new Map<string, number>();
     for (const v of violations) {
@@ -248,24 +298,45 @@ export default function Statistics() {
     }
     for (const c of VEHICLE_ORDER) if (!map.has(c)) map.set(c, 0);
 
-    return Array.from(map.entries()).map(([k, count]) => ({
+    return VEHICLE_ORDER.map((k) => ({
       name: k.replace(/\b\w/g, (s) => s.toUpperCase()),
-      count,
+      key: k,
+      count: map.get(k) ?? 0,
       fill: colorForClass(k),
     }));
   }, [violations]);
 
-  // --- Status Distribution (Pie) ---------------------------------------------
+  // --- Status Distribution (BAR DATA) ----------------------------------------
   const statusData = useMemo(() => {
     const map = new Map<string, number>();
     for (const v of violations) {
-      const key = v.status ?? "Unknown";
+      const key = (v.status ?? "Unknown").toLowerCase();
       map.set(key, (map.get(key) ?? 0) + 1);
     }
-    return Array.from(map.entries()).map(([name, value]) => ({
-      name,
+
+    const items = Array.from(map.entries()).map(([k, value]) => ({
+      name: k.replace(/\b\w/g, (s) => s.toUpperCase()),
+      key: k,
       value,
+      fill: colorForStatus(k),
     }));
+
+    items.sort((a, b) => b.value - a.value);
+    return items;
+  }, [violations]);
+
+  // --- Violations by Street (TOP 10) -----------------------------------------
+  const violationsByStreet = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const v of violations) {
+      const street = (v.street_name || "").trim() || "Unknown street";
+      map.set(street, (map.get(street) ?? 0) + 1);
+    }
+
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
   }, [violations]);
 
   // --- Heatmap (Day × Hour) ---------------------------------------------------
@@ -294,15 +365,15 @@ export default function Statistics() {
     }
     for (const c of VEHICLE_ORDER) if (!map.has(c)) map.set(c, 0);
 
-    return Array.from(map.entries()).map(([k, count]) => ({
+    return VEHICLE_ORDER.map((k) => ({
       name: k.replace(/\b\w/g, (s) => s.toUpperCase()),
-      count,
+      key: k,
+      count: map.get(k) ?? 0,
       fill: colorForClass(k),
     }));
   }, [myResolved]);
 
   const myResolvedTrend = useMemo(() => {
-    const days = selected.days;
     const map = new Map<string, number>();
 
     for (const v of myResolved) {
@@ -311,134 +382,164 @@ export default function Statistics() {
       const d = new Date(t);
       if (isNaN(d.getTime())) continue;
 
-      const key =
-        days === null
-          ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
-          : d.toISOString().slice(0, 10);
+      const shouldMonth =
+        appliedStartISO && appliedEndISO
+          ? daysBetween(appliedStartISO, appliedEndISO) > 60
+          : true;
+
+      const key = shouldMonth
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+        : d.toISOString().slice(0, 10);
 
       map.set(key, (map.get(key) ?? 0) + 1);
     }
 
-    const rows = Array.from(map.entries())
+    return Array.from(map.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([key, count]) => ({
-        label: days === null ? key : key.slice(5),
+        label: key.length === 10 ? key.slice(5) : key, // MM-DD or YYYY-MM
         count,
-      }));
+      }))
+      .slice(-30);
+  }, [myResolved, appliedStartISO, appliedEndISO]);
 
-    return days === null ? rows.slice(-12) : rows.slice(-30);
-  }, [myResolved, selected.days]);
+  const trendModeLabel =
+    appliedStartISO && appliedEndISO && daysBetween(appliedStartISO, appliedEndISO) > 60
+      ? "Grouped by month (last shown)."
+      : "Grouped by day (last shown).";
 
   // ---------------------------------------------------------------------------
 
   return (
     <div className="page space-y-4">
+      {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-main">Statistics</h1>
           <p className="text-sm text-muted">
-            {loading ? "Loading…" : `${violations.length} records`} •{" "}
-            {selected.label}
+            {loading ? "Loading…" : `${violations.length} records`} • {rangeLabel}
           </p>
         </div>
+      </div>
 
-        {/* Range Filter */}
-        <div className="flex gap-2">
-          {RANGE_OPTIONS.map((opt) => {
-            const active = range === opt.key;
-            return (
+       {/* Date range card */}
+      <div className="card p-4">
+        <div className="flex flex-col gap-3">
+          <div className="text-sm font-semibold text-main">Date range</div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:items-end">
+            <div>
+              <label className="roam-label">Start date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="roam-input mt-1"
+              />
+            </div>
+
+            <div>
+              <label className="roam-label">End date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="roam-input mt-1"
+              />
+            </div>
+
+            <div className="flex gap-2">
               <button
-                key={opt.key}
-                className={`filter-pill ${active ? "filter-pill-active" : ""}`}
-                onClick={() => setRange(opt.key)}
+                type="button"
+                onClick={onApplyDates}
+                className="w-full rounded-2xl bg-orange-600 py-3 text-white font-semibold hover:bg-orange-700 active:bg-orange-800 disabled:opacity-50"
                 disabled={loading || myLoading}
-                title={opt.label}
               >
-                {opt.label}
+                Apply
               </button>
-            );
-          })}
+              <button
+                type="button"
+                onClick={onClearDates}
+                className="w-full rounded-2xl border border-gray-300 py-3 text-sm font-semibold bg-white hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
+                disabled={loading || myLoading}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {dateError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700 text-sm">
+              {dateError}
+            </div>
+          )}
         </div>
       </div>
+
 
       {/* ===================== MY RESOLVED (TOP SECTION) ===================== */}
       <div className="card p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-main">
-              My Resolved Summary
-            </h2>
+            <h2 className="text-lg font-semibold text-main">My Resolved Summary</h2>
             <p className="text-xs text-muted">
-              {myLoading ? "Loading…" : `${myResolved.length} resolved`} •{" "}
-              {selected.label}
+              {myLoading ? "Loading…" : `${myResolved.length} resolved`} • {rangeLabel}
             </p>
           </div>
 
           <div className="text-right">
             <div className="text-xs text-muted">Total Resolved</div>
-            <div className="text-2xl font-bold text-main">{myResolved.length}</div>
+            <div className="text-2xl font-bold text-main tabular-nums">{myResolved.length}</div>
           </div>
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {/* Donut */}
+          {/* Resolved by vehicle (BIG chart, smaller legend) */}
           <div className="card p-4">
             <h3 className="text-sm font-semibold mb-3 text-main">
               Resolved Violations by Vehicle Type
             </h3>
 
             {myResolved.length === 0 ? (
-              <div className="h-[260px] grid place-items-center text-sm text-muted">
+              <div className="h-[360px] grid place-items-center text-sm text-muted">
                 No resolved data in this range.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_160px] gap-2 items-center">
-                <div style={{ width: "100%", height: 260 }}>
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_170px] gap-3 items-center">
+                <div style={{ width: "100%", height: 360 }}>
                   <ResponsiveContainer>
-                    <PieChart>
-                      <Pie
-                        data={myResolvedByVehicle.filter((d) => d.count > 0)}
-                        dataKey="count"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={70}
-                        outerRadius={105}
-                        paddingAngle={2}
-                        isAnimationActive={false}
-                      >
+                    <BarChart data={myResolvedByVehicle.filter((d) => d.count > 0)}>
+                      <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
+                      <XAxis tick={false} axisLine={false} tickLine={false} />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip />
+                      <Bar dataKey="count" radius={[10, 10, 0, 0]} isAnimationActive={false}>
                         {myResolvedByVehicle
                           .filter((d) => d.count > 0)
-                          .map((e, i) => (
-                            <Cell key={i} fill={e.fill} />
+                          .map((d, i) => (
+                            <Cell key={i} fill={d.fill} />
                           ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
+                      </Bar>
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
 
-                {/* Custom legend */}
-                <div className="max-h-[240px] overflow-auto pr-1">
+                <div className="max-h-[320px] overflow-auto pr-1">
+                  <div className="text-[11px] font-semibold text-main mb-2">Legend</div>
                   <div className="space-y-2">
                     {myResolvedByVehicle
                       .filter((d) => d.count > 0)
                       .sort((a, b) => b.count - a.count)
                       .map((d) => (
-                        <div
-                          key={d.name}
-                          className="flex items-center justify-between gap-3"
-                        >
+                        <div key={d.key} className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2 min-w-0">
                             <span
-                              className="inline-block h-2.5 w-2.5 rounded-sm"
+                              className="inline-block h-3 w-3 rounded-sm"
                               style={{ backgroundColor: d.fill }}
                             />
-                            <span className="text-xs text-sub truncate">
-                              {d.name}
-                            </span>
+                            <span className="text-[11px] text-sub truncate">{d.name}</span>
                           </div>
-                          <span className="text-xs font-semibold text-main">
+                          <span className="text-[11px] font-semibold text-main tabular-nums">
                             {d.count}
                           </span>
                         </div>
@@ -456,99 +557,168 @@ export default function Statistics() {
             </h3>
 
             {myResolvedTrend.length === 0 ? (
-              <div className="h-[260px] grid place-items-center text-sm text-muted">
-                No trend data yet.
+              <div className="h-[360px] grid place-items-center text-sm text-muted">
+                Not enough data to show a trend yet.
               </div>
             ) : (
-              <div style={{ width: "100%", height: 260 }}>
+              <div style={{ width: "100%", height: 360 }}>
                 <ResponsiveContainer>
-                  <BarChart
-                    data={myResolvedTrend}
-                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <BarChart data={myResolvedTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
+                    {/* ✅ hide labels (no ugly x labels) */}
+                    <XAxis tick={false} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} />
                     <Tooltip />
-                    <Bar dataKey="count" fill="#10B981" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="count" fill="#10B981" radius={[10, 10, 0, 0]} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
 
-            <div className="mt-2 text-[11px] text-muted">
-              {selected.days === null
-                ? "Grouped by month (last 12 shown)."
-                : "Grouped by day (last 30 shown)."}
+            <div className="mt-2 text-[11px] text-muted">{trendModeLabel}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Vehicle Class Distribution (BIG chart, smaller legend) */}
+      <div className="card p-4">
+        <h2 className="text-lg font-semibold mb-3 text-main">Vehicle Class Distribution</h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_190px] gap-3 items-center">
+          <div style={{ width: "100%", height: 380 }}>
+            <ResponsiveContainer>
+              <BarChart data={classCounts.filter((d) => d.count > 0)}>
+                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
+                <XAxis tick={false} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="count" radius={[10, 10, 0, 0]} isAnimationActive={false}>
+                  {classCounts
+                    .filter((d) => d.count > 0)
+                    .map((d, i) => (
+                      <Cell key={i} fill={d.fill} />
+                    ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="max-h-[340px] overflow-auto pr-1">
+            <div className="text-[11px] font-semibold text-main mb-2">Legend</div>
+            <div className="space-y-2">
+              {classCounts
+                .filter((d) => d.count > 0)
+                .slice()
+                .sort((a, b) => b.count - a.count)
+                .map((d) => (
+                  <div key={d.key} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="inline-block h-3 w-3 rounded-sm"
+                        style={{ backgroundColor: d.fill }}
+                      />
+                      <span className="text-[11px] text-sub truncate">{d.name}</span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-main tabular-nums">{d.count}</span>
+                  </div>
+                ))}
             </div>
           </div>
         </div>
       </div>
-      {/* =================== END MY RESOLVED (TOP SECTION) =================== */}
 
-      {/* Vehicle Class Distribution */}
+      {/* Violation Status (change bar colors per status + bigger chart) */}
       <div className="card p-4">
-        <h2 className="text-lg font-semibold mb-3 text-main">
-          Vehicle Class Distribution
-        </h2>
-        <div style={{ width: "100%", height: 320 }}>
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie
-                data={classCounts}
-                dataKey="count"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                innerRadius={70}
-                outerRadius={110}
-                label
-              >
-                {classCounts.map((entry, i) => (
-                  <Cell key={i} fill={entry.fill} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend verticalAlign="bottom" />
-            </PieChart>
-          </ResponsiveContainer>
+        <h2 className="text-lg font-semibold mb-3 text-main">Violation Status</h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_190px] gap-3 items-center">
+          <div style={{ width: "100%", height: 340 }}>
+            <ResponsiveContainer>
+              <BarChart data={statusData}>
+                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
+                <XAxis tick={false} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[10, 10, 0, 0]} isAnimationActive={false}>
+                  {statusData.map((d, i) => (
+                    <Cell key={i} fill={d.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="max-h-[300px] overflow-auto pr-1">
+            <div className="text-[11px] font-semibold text-main mb-2">Legend</div>
+            <div className="space-y-2">
+              {statusData.map((d) => (
+                <div key={d.key} className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="inline-block h-3 w-3 rounded-sm"
+                      style={{ backgroundColor: d.fill }}
+                    />
+                    <span className="text-[11px] text-sub truncate">{d.name}</span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-main tabular-nums">{d.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Violation Status */}
+      {/* ✅ Violations by Street */}
       <div className="card p-4">
-        <h2 className="text-lg font-semibold mb-3 text-main">Violation Status</h2>
-        <div style={{ width: "100%", height: 300 }}>
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie
-                data={statusData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                label
-              >
-                {statusData.map((_, i) => (
-                  <Cell
-                    key={i}
-                    fill={["#F59E0B", "#10B981", "#EF4444", "#6B7280"][i % 4]}
+        <h2 className="text-lg font-semibold mb-3 text-main">Violations by Street</h2>
+
+        {violationsByStreet.length === 0 ? (
+          <div className="h-[380px] grid place-items-center text-sm text-muted">
+            No street data available for this range.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_190px] gap-3 items-center">
+            <div style={{ width: "100%", height: 380 }}>
+              <ResponsiveContainer>
+                <BarChart
+                  data={violationsByStreet}
+                  layout="vertical"
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
+                  <XAxis type="number" allowDecimals={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fontSize: 11 }}
+                    width={110}
                   />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#F97316" radius={[0, 10, 10, 0]} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="max-h-[340px] overflow-auto pr-1">
+              <div className="text-[11px] font-semibold text-main mb-2">Top streets</div>
+              <div className="space-y-2">
+                {violationsByStreet.map((d) => (
+                  <div key={d.name} className="flex items-center justify-between gap-3">
+                    <span className="text-[11px] text-sub truncate">{d.name}</span>
+                    <span className="text-[11px] font-semibold text-main tabular-nums">{d.count}</span>
+                  </div>
                 ))}
-              </Pie>
-              <Tooltip />
-              <Legend verticalAlign="bottom" />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Heatmap (Day × Hour) */}
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-main">Heatmap (Day × Hour)</h2>
-          <div className="text-xs text-muted">{selected.label}</div>
+          <div className="text-xs text-muted">{rangeLabel}</div>
         </div>
 
         <div className="grid grid-cols-[64px_repeat(24,minmax(0,1fr))] gap-1 mb-1 text-[10px] text-muted">
@@ -569,9 +739,7 @@ export default function Statistics() {
               <div className="text-xs text-sub">{label}</div>
               {Array.from({ length: 24 }).map((_, hr) => {
                 const count = heatData.mat[dow][hr];
-                const col = heatData.max
-                  ? heatColor(count / heatData.max)
-                  : heatColor(0);
+                const col = heatData.max ? heatColor(count / heatData.max) : heatColor(0);
                 return (
                   <div
                     key={`${dow}-${hr}`}
@@ -592,9 +760,7 @@ export default function Statistics() {
           <div
             className="h-3 w-20 rounded"
             style={{
-              background: `linear-gradient(to right, ${heatColor(
-                0
-              )}, ${heatColor(1)})`,
+              background: `linear-gradient(to right, ${heatColor(0)}, ${heatColor(1)})`,
             }}
           />
           <span>High</span>

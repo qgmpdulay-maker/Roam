@@ -54,9 +54,8 @@ export default function Profile() {
   const [avatar, setAvatar] = useState("");
   const [street, setStreet] = useState("Unassigned");
 
-  // quick stats
+  // quick stats (kept: resolved + last resolved)
   const [resolvedCount, setResolvedCount] = useState<number>(0);
-  const [pendingOnMyStreetCount, setPendingOnMyStreetCount] = useState<number>(0);
   const [lastResolvedAt, setLastResolvedAt] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState<boolean>(false);
 
@@ -158,7 +157,7 @@ export default function Profile() {
     })();
   }, [userId, authEmail]);
 
-  // 3) Load quick stats once profile is available
+  // 3) Load quick stats once profile is available (resolved + last resolved only)
   useEffect(() => {
     if (!profile?.account_id) return;
 
@@ -176,18 +175,6 @@ export default function Profile() {
 
         if (rErr) throw rErr;
 
-        let pendingStreet = 0;
-        if ((profile.street_assignment ?? "Unassigned") !== "Unassigned") {
-          const { count: pending, error: pErr } = await supabase
-            .from("violations")
-            .select("id", { count: "exact", head: true })
-            .eq("status", "pending")
-            .eq("street_name", profile.street_assignment ?? "");
-
-          if (pErr) throw pErr;
-          pendingStreet = pending ?? 0;
-        }
-
         const { data: lastRow, error: lErr } = await supabase
           .from("violations")
           .select("id,resolved_at,status")
@@ -201,14 +188,12 @@ export default function Profile() {
 
         if (!cancelled) {
           setResolvedCount(resolved ?? 0);
-          setPendingOnMyStreetCount(pendingStreet);
           setLastResolvedAt(lastRow?.resolved_at ?? null);
         }
       } catch (e) {
         console.error(e);
         if (!cancelled) {
           setResolvedCount(0);
-          setPendingOnMyStreetCount(0);
           setLastResolvedAt(null);
         }
       } finally {
@@ -219,7 +204,7 @@ export default function Profile() {
     return () => {
       cancelled = true;
     };
-  }, [profile?.account_id, profile?.street_assignment]);
+  }, [profile?.account_id]);
 
   // Save updates (only if a row exists)
   async function save() {
@@ -349,15 +334,11 @@ export default function Profile() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-3">
+        {/* ✅ now 2 cards only */}
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-neutral-200 dark:border-gray-800 p-3 bg-white/70 dark:bg-gray-900/40">
             <div className="text-xs text-muted">Resolved Violations</div>
             <div className="text-2xl font-bold text-main">{resolvedCount}</div>
-          </div>
-
-          <div className="rounded-xl border border-neutral-200 dark:border-gray-800 p-3 bg-white/70 dark:bg-gray-900/40">
-            <div className="text-xs text-muted">Pending Violations</div>
-            <div className="text-2xl font-bold text-main">{pendingOnMyStreetCount}</div>
           </div>
 
           <div className="rounded-xl border border-neutral-200 dark:border-gray-800 p-3 bg-white/70 dark:bg-gray-900/40">
@@ -479,11 +460,7 @@ export default function Profile() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="roam-label">Joined</label>
-            <input
-              value={fmtDate(profile.created_at)}
-              readOnly
-              className="roam-input mt-1 opacity-80"
-            />
+            <input value={fmtDate(profile.created_at)} readOnly className="roam-input mt-1 opacity-80" />
           </div>
 
           <div>

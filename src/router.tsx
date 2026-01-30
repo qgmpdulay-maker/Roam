@@ -20,8 +20,6 @@ import ViolationDetail from "@/pages/ViolationDetail";
 import Statistics from "@/pages/Statistics";
 import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings";
-
-// ✅ NEW: import the page
 import Violators from "@/pages/Violators";
 
 import { useAuth } from "@/store/auth";

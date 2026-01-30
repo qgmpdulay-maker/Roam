@@ -110,6 +110,37 @@ function daysBetween(startISO: string, endISO: string) {
   return Math.max(0, Math.round((e - s) / (1000 * 60 * 60 * 24)));
 }
 
+// --- Chart tuning (EDIT THESE) -----------------------------------------------
+// One place to adjust alignment + spacing for ALL charts
+const CHART_MARGIN = { top: 12, right: 18, bottom: 10, left: 18 };
+
+// Push bars away from edges so charts don't look off-center
+const X_AXIS_PAD = { left: 26, right: 26 };
+
+// Give the Y axis some breathing room (this is what “moves that”)
+const Y_AXIS_WIDTH = 36;
+
+// Thicker bars
+const BAR_SIZE = 38;
+const MAX_BAR_SIZE = 52;
+
+// Gaps between categories/bars (lower gap => chunkier)
+const BAR_CATEGORY_GAP = "16%";
+const BAR_GAP = 8;
+
+// Shared axis props
+const X_AXIS_COMMON = {
+  tick: false,
+  axisLine: false,
+  tickLine: false,
+  padding: X_AXIS_PAD,
+};
+
+const Y_AXIS_COMMON = {
+  allowDecimals: false,
+  width: Y_AXIS_WIDTH,
+};
+
 // --- Component ---------------------------------------------------------------
 export default function Statistics() {
   const [violations, setViolations] = useState<Violation[]>([]);
@@ -212,10 +243,7 @@ export default function Statistics() {
     (async () => {
       try {
         setLoading(true);
-        const rows = await fetchAllViolationsPaginated(
-          appliedStartISO,
-          appliedEndISO
-        );
+        const rows = await fetchAllViolationsPaginated(appliedStartISO, appliedEndISO);
         if (!cancelled) setViolations(rows);
       } catch (e) {
         console.error(e);
@@ -251,9 +279,7 @@ export default function Statistics() {
 
         let q = supabase
           .from("violations")
-          .select(
-            "id,resolved_at,resolved_by,vehicle_class,status,timestamp,street_name"
-          )
+          .select("id,resolved_at,resolved_by,vehicle_class,status,timestamp,street_name")
           .eq("resolved_by", user.id)
           .eq("status", "resolved")
           .order("resolved_at", { ascending: true })
@@ -278,10 +304,7 @@ export default function Statistics() {
     (async () => {
       try {
         setMyLoading(true);
-        const rows = await fetchMyResolvedPaginated(
-          appliedStartISO,
-          appliedEndISO
-        );
+        const rows = await fetchMyResolvedPaginated(appliedStartISO, appliedEndISO);
         if (!cancelled) setMyResolved(rows);
       } catch (e) {
         console.error(e);
@@ -381,48 +404,44 @@ export default function Statistics() {
     }));
   }, [myResolved]);
 
-const myResolvedTrend = useMemo(() => {
-  const map = new Map<string, number>();
+  // Weekly trend (last 12 weeks)
+  const myResolvedTrend = useMemo(() => {
+    const map = new Map<string, number>();
 
-  for (const v of myResolved) {
-    const t = v.resolved_at ?? v.timestamp ?? null;
-    if (!t) continue;
+    for (const v of myResolved) {
+      const t = v.resolved_at ?? v.timestamp ?? null;
+      if (!t) continue;
 
-    const d = new Date(t);
-    if (isNaN(d.getTime())) continue;
+      const d = new Date(t);
+      if (isNaN(d.getTime())) continue;
 
-    // ✅ ISO week (Monday start)
-    const temp = new Date(d);
-    temp.setHours(0, 0, 0, 0);
+      // ISO week (Mon start)
+      const temp = new Date(d);
+      temp.setHours(0, 0, 0, 0);
 
-    // Thursday determines ISO week
-    temp.setDate(temp.getDate() + 3 - ((temp.getDay() + 6) % 7));
-    const week1 = new Date(temp.getFullYear(), 0, 4);
-    const weekNo =
-      1 +
-      Math.round(
-        ((temp.getTime() - week1.getTime()) / 86400000 -
-          3 +
-          ((week1.getDay() + 6) % 7)) /
-          7
-      );
+      // Thursday determines ISO week
+      temp.setDate(temp.getDate() + 3 - ((temp.getDay() + 6) % 7));
+      const week1 = new Date(temp.getFullYear(), 0, 4);
+      const weekNo =
+        1 +
+        Math.round(
+          ((temp.getTime() - week1.getTime()) / 86400000 -
+            3 +
+            ((week1.getDay() + 6) % 7)) /
+            7
+        );
 
-    const key = `${temp.getFullYear()}-W${String(weekNo).padStart(2, "0")}`;
-    map.set(key, (map.get(key) ?? 0) + 1);
-  }
+      const key = `${temp.getFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
 
-  return Array.from(map.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([key, count]) => ({
-      label: key, // e.g. 2026-W04
-      count,
-    }))
-    .slice(-12); // last 12 weeks
-}, [myResolved]);
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, count]) => ({ label: key, count }))
+      .slice(-12);
+  }, [myResolved]);
 
-const trendModeLabel = "Grouped by week (last 12 weeks).";
-
-  // ✅ show chart only if there is a real “trend”
+  const trendModeLabel = "Grouped by week (last 12 weeks).";
   const showTrendChart = myResolvedTrend.length > 1;
 
   // ---------------------------------------------------------------------------
@@ -445,23 +464,25 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
           <div className="text-sm font-semibold text-main">Date range</div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:items-end">
-            <div>
+            <div className="relative">
               <label className="roam-label">Start date</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="roam-input mt-1"
+                className="roam-input mt-1 text-left pr-10 appearance-none [&::-webkit-date-and-time-value]:text-left"
+                style={{ WebkitAppearance: "none" }}
               />
             </div>
 
-            <div>
+            <div className="relative">
               <label className="roam-label">End date</label>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="roam-input mt-1"
+                className="roam-input mt-1 text-left pr-10 appearance-none [&::-webkit-date-and-time-value]:text-left"
+                style={{ WebkitAppearance: "none" }}
               />
             </div>
 
@@ -497,12 +518,9 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
       <div className="card p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-main">
-              My Resolved Summary
-            </h2>
+            <h2 className="text-lg font-semibold text-main">My Resolved Summary</h2>
             <p className="text-xs text-muted">
-              {myLoading ? "Loading…" : `${myResolved.length} resolved`} •{" "}
-              {rangeLabel}
+              {myLoading ? "Loading…" : `${myResolved.length} resolved`} • {rangeLabel}
             </p>
           </div>
 
@@ -515,7 +533,7 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {/* Resolved by vehicle (BIG chart, smaller legend) */}
+          {/* Resolved by vehicle */}
           <div className="card p-4">
             <h3 className="text-sm font-semibold mb-3 text-main">
               Resolved Violations by Vehicle Type
@@ -531,18 +549,20 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
                   <ResponsiveContainer>
                     <BarChart
                       data={myResolvedByVehicle.filter((d) => d.count > 0)}
+                      margin={CHART_MARGIN}
+                      barCategoryGap={BAR_CATEGORY_GAP}
+                      barGap={BAR_GAP}
                     >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        strokeOpacity={0.3}
-                      />
-                      <XAxis tick={false} axisLine={false} tickLine={false} />
-                      <YAxis allowDecimals={false} />
+                      <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
+                      <XAxis {...X_AXIS_COMMON} />
+                      <YAxis {...Y_AXIS_COMMON} />
                       <Tooltip />
                       <Bar
                         dataKey="count"
                         radius={[10, 10, 0, 0]}
                         isAnimationActive={false}
+                        barSize={BAR_SIZE}
+                        maxBarSize={MAX_BAR_SIZE}
                       >
                         {myResolvedByVehicle
                           .filter((d) => d.count > 0)
@@ -555,9 +575,7 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
                 </div>
 
                 <div className="max-h-[320px] overflow-auto pr-1">
-                  <div className="text-[11px] font-semibold text-main mb-2">
-                    Legend
-                  </div>
+                  <div className="text-[11px] font-semibold text-main mb-2">Legend</div>
                   <div className="space-y-2">
                     {myResolvedByVehicle
                       .filter((d) => d.count > 0)
@@ -572,9 +590,7 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
                               className="inline-block h-3 w-3 rounded-sm"
                               style={{ backgroundColor: d.fill }}
                             />
-                            <span className="text-[11px] text-sub truncate">
-                              {d.name}
-                            </span>
+                            <span className="text-[11px] text-sub truncate">{d.name}</span>
                           </div>
                           <span className="text-[11px] font-semibold text-main tabular-nums">
                             {d.count}
@@ -587,7 +603,7 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
             )}
           </div>
 
-          {/* Trend (FIXED: centered grid + better spacing) */}
+          {/* Trend (weekly) */}
           <div className="card p-4">
             <h3 className="text-sm font-semibold mb-3 text-main">
               Violations Resolved Trend
@@ -602,27 +618,20 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
                 <ResponsiveContainer>
                   <BarChart
                     data={myResolvedTrend}
-                    margin={{ top: 12, right: 16, left: 12, bottom: 0 }}
-                    barCategoryGap="35%"
+                    margin={{ top: 12, right: 16, left: 0, bottom: 0 }}
+                    barCategoryGap="10%"
+                    barGap={BAR_GAP}
                   >
                     <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
-                    <XAxis
-                      dataKey="label"
-                      tick={false}
-                      axisLine={false}
-                      tickLine={false}
-                      interval={0}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      width={25}
-                    />
+                    <XAxis {...X_AXIS_COMMON} />
+                    <YAxis {...Y_AXIS_COMMON} />
                     <Tooltip />
                     <Bar
                       dataKey="count"
                       fill="#10B981"
                       radius={[10, 10, 0, 0]}
-                      barSize={36}
+                      barSize={BAR_SIZE}
+                      maxBarSize={MAX_BAR_SIZE}
                       isAnimationActive={false}
                     />
                   </BarChart>
@@ -635,24 +644,29 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
         </div>
       </div>
 
-      {/* Vehicle Class Distribution (BIG chart, smaller legend) */}
+      {/* Vehicle Class Distribution */}
       <div className="card p-4">
-        <h2 className="text-lg font-semibold mb-3 text-main">
-          Vehicle Class Distribution
-        </h2>
+        <h2 className="text-lg font-semibold mb-3 text-main">Vehicle Class Distribution</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-[1fr_190px] gap-3 items-center">
           <div style={{ width: "100%", height: 380 }}>
             <ResponsiveContainer>
-              <BarChart data={classCounts.filter((d) => d.count > 0)}>
+              <BarChart
+                data={classCounts.filter((d) => d.count > 0)}
+                margin={{ top: 12, right: 16, left: 5, bottom: 0 }}
+                barCategoryGap={BAR_CATEGORY_GAP}
+                barGap={BAR_GAP}
+              >
                 <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
-                <XAxis tick={false} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} />
+                <XAxis {...X_AXIS_COMMON} />
+                <YAxis {...Y_AXIS_COMMON} />
                 <Tooltip />
                 <Bar
                   dataKey="count"
                   radius={[10, 10, 0, 0]}
                   isAnimationActive={false}
+                  barSize={BAR_SIZE}
+                  maxBarSize={MAX_BAR_SIZE}
                 >
                   {classCounts
                     .filter((d) => d.count > 0)
@@ -665,27 +679,20 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
           </div>
 
           <div className="max-h-[340px] overflow-auto pr-1">
-            <div className="text-[11px] font-semibold text-main mb-2">
-              Legend
-            </div>
+            <div className="text-[11px] font-semibold text-main mb-2">Legend</div>
             <div className="space-y-2">
               {classCounts
                 .filter((d) => d.count > 0)
                 .slice()
                 .sort((a, b) => b.count - a.count)
                 .map((d) => (
-                  <div
-                    key={d.key}
-                    className="flex items-center justify-between gap-3"
-                  >
+                  <div key={d.key} className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0">
                       <span
                         className="inline-block h-3 w-3 rounded-sm"
                         style={{ backgroundColor: d.fill }}
                       />
-                      <span className="text-[11px] text-sub truncate">
-                        {d.name}
-                      </span>
+                      <span className="text-[11px] text-sub truncate">{d.name}</span>
                     </div>
                     <span className="text-[11px] font-semibold text-main tabular-nums">
                       {d.count}
@@ -697,22 +704,29 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
         </div>
       </div>
 
-      {/* Violation Status (change bar colors per status + bigger chart) */}
+      {/* Violation Status */}
       <div className="card p-4">
         <h2 className="text-lg font-semibold mb-3 text-main">Violation Status</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-[1fr_190px] gap-3 items-center">
           <div style={{ width: "100%", height: 340 }}>
             <ResponsiveContainer>
-              <BarChart data={statusData}>
+              <BarChart
+                data={statusData}
+                margin={{ top: 12, right: 16, left: 0, bottom: 0 }}
+                barCategoryGap="22%"
+                barGap={BAR_GAP}
+              >
                 <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
-                <XAxis tick={false} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} />
+                <XAxis {...X_AXIS_COMMON} />
+                <YAxis {...Y_AXIS_COMMON} />
                 <Tooltip />
                 <Bar
                   dataKey="value"
                   radius={[10, 10, 0, 0]}
                   isAnimationActive={false}
+                  barSize={BAR_SIZE}
+                  maxBarSize={MAX_BAR_SIZE}
                 >
                   {statusData.map((d, i) => (
                     <Cell key={i} fill={d.fill} />
@@ -726,10 +740,7 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
             <div className="text-[11px] font-semibold text-main mb-2">Legend</div>
             <div className="space-y-2">
               {statusData.map((d) => (
-                <div
-                  key={d.key}
-                  className="flex items-center justify-between gap-3"
-                >
+                <div key={d.key} className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <span
                       className="inline-block h-3 w-3 rounded-sm"
@@ -747,11 +758,9 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
         </div>
       </div>
 
-      {/* ✅ Violations by Street */}
+      {/* Violations by Street */}
       <div className="card p-4">
-        <h2 className="text-lg font-semibold mb-3 text-main">
-          Violations by Street
-        </h2>
+        <h2 className="text-lg font-semibold mb-3 text-main">Violations by Street</h2>
 
         {violationsByStreet.length === 0 ? (
           <div className="h-[380px] grid place-items-center text-sm text-muted">
@@ -764,32 +773,37 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
                 <BarChart
                   data={violationsByStreet}
                   layout="vertical"
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  margin={{ top: 12, right: 18, bottom: 10, left: 10 }}
+                  barCategoryGap="18%"
                 >
                   <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
-                  <XAxis type="number" allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={110} />
+                  <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={140}
+                  />
                   <Tooltip />
                   <Bar
                     dataKey="count"
                     fill="#F97316"
                     radius={[0, 10, 10, 0]}
                     isAnimationActive={false}
+                    barSize={22}
+                    maxBarSize={34}
                   />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
             <div className="max-h-[340px] overflow-auto pr-1">
-              <div className="text-[11px] font-semibold text-main mb-2">
-                Top streets
-              </div>
+              <div className="text-[11px] font-semibold text-main mb-2">Top streets</div>
               <div className="space-y-2">
                 {violationsByStreet.map((d) => (
-                  <div
-                    key={d.name}
-                    className="flex items-center justify-between gap-3"
-                  >
+                  <div key={d.name} className="flex items-center justify-between gap-3">
                     <span className="text-[11px] text-sub truncate">{d.name}</span>
                     <span className="text-[11px] font-semibold text-main tabular-nums">
                       {d.count}
@@ -827,9 +841,7 @@ const trendModeLabel = "Grouped by week (last 12 weeks).";
               <div className="text-xs text-sub">{label}</div>
               {Array.from({ length: 24 }).map((_, hr) => {
                 const count = heatData.mat[dow][hr];
-                const col = heatData.max
-                  ? heatColor(count / heatData.max)
-                  : heatColor(0);
+                const col = heatData.max ? heatColor(count / heatData.max) : heatColor(0);
                 return (
                   <div
                     key={`${dow}-${hr}`}

@@ -773,27 +773,31 @@ export default function Statistics() {
                 <BarChart
                   data={violationsByStreet}
                   layout="vertical"
-                  margin={{ top: 12, right: 18, bottom: 10, left: 10 }}
-                  barCategoryGap="18%"
+                  margin={{ top: 10, right: 16, left: -10, bottom: 0 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
-                  <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} />
+
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    padding={{ left: 0, right: 8 }}
+                  />
+
                   <YAxis
                     type="category"
                     dataKey="name"
                     tick={{ fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={140}
+                    width={80}
                   />
+
                   <Tooltip />
+
                   <Bar
                     dataKey="count"
                     fill="#F97316"
                     radius={[0, 10, 10, 0]}
+                    barSize={26}
                     isAnimationActive={false}
-                    barSize={22}
-                    maxBarSize={34}
                   />
                 </BarChart>
               </ResponsiveContainer>

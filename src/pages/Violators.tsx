@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type ViolatorRow = {
@@ -27,7 +27,7 @@ type ViolationHistoryRow = {
   license_plate: string | null;
   violator_id?: string | null;
 
-  // ✅ real image columns that exist in your DB
+  // ✅ your actual columns
   violator_image_url?: string | null;
   image_url?: string | null;
 };
@@ -53,7 +53,6 @@ function pillClassForStatus(status?: string | null) {
   return "bg-neutral-50 text-neutral-700 border-neutral-200";
 }
 
-// chunk helper for Supabase IN(...) limits
 function chunk<T>(arr: T[], size: number) {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -67,25 +66,20 @@ export default function Violators() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // plate -> vehicle_type (from violations table)
   const [plateToVehicle, setPlateToVehicle] = useState<Record<string, string>>({});
-
-  // ✅ violatorId -> thumbnail image url (latest violation image)
   const [violatorThumbs, setViolatorThumbs] = useState<Record<string, string>>({});
 
-  // Search + filter
   const [q, setQ] = useState("");
   const [vehicleFilter, setVehicleFilter] = useState<string>("all");
 
-  // Expanded history state (lazy loaded)
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [historyByViolator, setHistoryByViolator] = useState<Record<string, ViolationHistoryRow[]>>(
-    {}
-  );
+  const [historyByViolator, setHistoryByViolator] = useState<Record<string, ViolationHistoryRow[]>>({});
   const [historyLoadingId, setHistoryLoadingId] = useState<string | null>(null);
   const [historyErrorById, setHistoryErrorById] = useState<Record<string, string>>({});
 
-  // ✅ IMPORTANT: ensure these match your DB
+  // ✅ NEW: lightbox state
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   const VIOLATORS_TABLE = "violators";
   const VIOLATIONS_TABLE = "violations";
   const VIOLATIONS_PLATE_COL = "license_plate";
@@ -110,7 +104,6 @@ export default function Violators() {
         const list = (data ?? []) as ViolatorRow[];
         if (!cancelled) setRows(list);
 
-        // After violators load, fetch vehicle types for plates
         const plates = list.map((r) => norm(r.license_plate)).filter(Boolean);
 
         if (!cancelled) {
@@ -118,7 +111,7 @@ export default function Violators() {
           if (!cancelled) setPlateToVehicle(mapping);
         }
 
-        // ✅ Fetch thumbnails (latest photo per violator)
+        // thumbnails
         for (const r of list) {
           if (cancelled) break;
           if (!r?.id) continue;
@@ -127,9 +120,7 @@ export default function Violators() {
           const img = await fetchLatestImageForViolator(r.id, plate);
           if (cancelled) break;
 
-          if (img) {
-            setViolatorThumbs((prev) => ({ ...prev, [r.id]: img }));
-          }
+          if (img) setViolatorThumbs((prev) => ({ ...prev, [r.id]: img }));
         }
       } catch (e: any) {
         console.error("Violators fetch error:", e);
@@ -144,11 +135,9 @@ export default function Violators() {
     }
 
     fetchViolators();
-
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchVehicleTypesForPlates(plates: string[]) {
@@ -164,10 +153,7 @@ export default function Violators() {
         .in(VIOLATIONS_PLATE_COL, part)
         .order(VIOLATIONS_TIME_COL, { ascending: false });
 
-      if (error) {
-        console.error("Vehicle type lookup error:", error);
-        continue;
-      }
+      if (error) continue;
 
       const list = (data ?? []) as any[];
 
@@ -192,7 +178,6 @@ export default function Violators() {
     return out;
   }
 
-  // ✅ Latest image for violator: violator_image_url -> image_url fallback
   async function fetchLatestImageForViolator(violatorId: string, plate: string) {
     const cleanPlate = norm(plate);
 
@@ -208,22 +193,16 @@ export default function Violators() {
       .limit(1)
       .maybeSingle();
 
-    if (error) {
-      console.error("Thumbnail fetch error:", error);
-      return null;
-    }
+    if (error) return null;
 
     const row = data as any;
     return row?.violator_image_url || row?.image_url || null;
   }
 
   async function fetchViolationHistoryForViolator(violatorId: string, plate: string) {
-    // First try: proper relational link via violator_id
     const q1 = supabase
       .from(VIOLATIONS_TABLE)
-      .select(
-        "id,timestamp,status,street_name,violation_type,vehicle_class,license_plate,violator_id,violator_image_url,image_url"
-      )
+      .select("id,timestamp,status,street_name,violation_type,vehicle_class,license_plate,violator_id")
       .eq("violator_id", violatorId)
       .order("timestamp", { ascending: false })
       .limit(30);
@@ -234,15 +213,12 @@ export default function Violators() {
     const list1 = (d1 ?? []) as ViolationHistoryRow[];
     if (list1.length > 0) return list1;
 
-    // Fallback: match by license_plate (if older rows didn’t set violator_id)
     const p = norm(plate);
     if (!p) return list1;
 
     const q2 = supabase
       .from(VIOLATIONS_TABLE)
-      .select(
-        "id,timestamp,status,street_name,violation_type,vehicle_class,license_plate,violator_id,violator_image_url,image_url"
-      )
+      .select("id,timestamp,status,street_name,violation_type,vehicle_class,license_plate,violator_id")
       .ilike("license_plate", p)
       .order("timestamp", { ascending: false })
       .limit(30);
@@ -254,15 +230,12 @@ export default function Violators() {
   }
 
   async function toggleHistory(violatorId: string, plate: string) {
-    // collapse
     if (expandedId === violatorId) {
       setExpandedId(null);
       return;
     }
 
     setExpandedId(violatorId);
-
-    // already cached
     if (historyByViolator[violatorId]) return;
 
     setHistoryLoadingId(violatorId);
@@ -272,12 +245,10 @@ export default function Violators() {
       const items = await fetchViolationHistoryForViolator(violatorId, plate);
       setHistoryByViolator((prev) => ({ ...prev, [violatorId]: items }));
     } catch (e: any) {
-      console.error("History fetch error:", e);
       setHistoryByViolator((prev) => ({ ...prev, [violatorId]: [] }));
       setHistoryErrorById((prev) => ({
         ...prev,
-        [violatorId]:
-          e?.message ?? "Could not load violation history. Check RLS on violations table.",
+        [violatorId]: e?.message ?? "Could not load violation history.",
       }));
     } finally {
       setHistoryLoadingId(null);
@@ -302,7 +273,6 @@ export default function Violators() {
       const name = normLower(r.full_name);
 
       const vt = normLower(plateToVehicle[norm(r.license_plate)]);
-
       const matchQuery = !query || plate.includes(query) || name.includes(query);
       const matchVehicle = vehicleFilter === "all" || normLower(vehicleFilter) === vt;
 
@@ -312,6 +282,34 @@ export default function Violators() {
 
   return (
     <div className="page space-y-4">
+      {/* Lightbox modal */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[999] bg-black/70 p-4 flex items-center justify-center"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div
+            className="relative w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="absolute -top-3 -right-3 rounded-full bg-white p-2 shadow"
+              onClick={() => setLightboxUrl(null)}
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+
+            <img
+              src={lightboxUrl}
+              alt="Violator"
+              className="w-full max-h-[80vh] object-contain rounded-2xl bg-black"
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-main">Violators</h1>
@@ -320,17 +318,6 @@ export default function Violators() {
           </p>
         </div>
       </div>
-
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700 text-sm">
-          <div className="font-semibold">Couldn’t load violators</div>
-          <div className="mt-1">{error}</div>
-          <div className="mt-2 text-[12px] text-red-600/90">
-            If it says “permission denied” / “RLS”, you need a SELECT policy for authenticated
-            users on <b>{VIOLATORS_TABLE}</b> (and maybe <b>{VIOLATIONS_TABLE}</b> too).
-          </div>
-        </div>
-      )}
 
       {/* Search + filter */}
       <div className="card p-4 space-y-3">
@@ -359,26 +346,6 @@ export default function Violators() {
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="flex items-center justify-between text-xs text-muted">
-          <span>
-            Showing <b className="text-main">{filtered.length}</b> of{" "}
-            <b className="text-main">{rows.length}</b>
-          </span>
-
-          <button
-            type="button"
-            className="rounded-xl border border-gray-300 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
-            onClick={() => {
-              setQ("");
-              setVehicleFilter("all");
-              setExpandedId(null);
-            }}
-            disabled={loading}
-          >
-            Reset
-          </button>
         </div>
       </div>
 
@@ -409,8 +376,14 @@ export default function Violators() {
               return (
                 <div key={r.id ?? `${plate}-${idx}`} className="p-3">
                   <div className="flex items-start gap-3">
-                    {/* Thumbnail */}
-                    <div className="shrink-0 h-14 w-14 rounded-xl overflow-hidden border border-neutral-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800">
+                    {/* ✅ Clickable thumbnail */}
+                    <button
+                      type="button"
+                      className="shrink-0 h-14 w-14 rounded-xl overflow-hidden border border-neutral-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800"
+                      onClick={() => thumb && setLightboxUrl(thumb)}
+                      disabled={!thumb}
+                      title={thumb ? "View photo" : "No photo"}
+                    >
                       {thumb ? (
                         <img
                           src={thumb}
@@ -423,9 +396,8 @@ export default function Violators() {
                           No Photo
                         </div>
                       )}
-                    </div>
+                    </button>
 
-                    {/* Main row content */}
                     <div className="flex-1 flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -464,7 +436,6 @@ export default function Violators() {
                           type="button"
                           className="rounded-xl border border-gray-300 px-2.5 py-2 text-xs font-semibold bg-white hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
                           onClick={() => toggleHistory(r.id, plate)}
-                          disabled={loading}
                           title={isOpen ? "Hide history" : "View history"}
                         >
                           {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

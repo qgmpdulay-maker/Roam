@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabase"; // <- relative path fallback
+import { supabase } from "../lib/supabase";
 
 type Violation = {
   id: string;
@@ -10,11 +10,15 @@ type Violation = {
   vehicle_class: string | null;
   timestamp: string | null;
   status: string | null;
-  license_plate: string | null; // from violations table
-  violator_name: string | null; // snapshot on violation
-  violator_id: string | null;   // FK -> violators.id
 
-  // NEW (added in DB)
+  license_plate: string | null;
+  violator_name: string | null;
+  violator_id: string | null;
+
+  // ✅ new (add these columns in DB)
+  violator_image_url?: string | null;
+  vehicle_image_url?: string | null;
+
   resolved_by?: string | null;
   resolved_at?: string | null;
 };
@@ -33,13 +37,9 @@ function fmtDate(iso?: string | null) {
   }
 }
 
-/** ABC 123 or ABC 1234 (exactly 3 letters, space, 3–4 digits) */
 const PLATE_REGEX = /^[A-Z]{3}\s\d{3,4}$/;
-
-/** PH mobile: 11 digits, starts with 09 (e.g., 09271351640) */
 const PHONE_REGEX = /^09\d{9}$/;
 
-/** Keep only letters/digits, force uppercase, insert a space after the first 3 letters */
 function normalizePlate(input: string): string {
   const raw = input.toUpperCase().replace(/[^A-Z0-9]/g, "");
   const letters = raw.slice(0, 3).replace(/[^A-Z]/g, "");
@@ -48,12 +48,20 @@ function normalizePlate(input: string): string {
   return digits ? `${letters} ${digits}` : letters;
 }
 
+function safeFilename(name: string) {
+  return String(name ?? "").replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
 export default function ViolationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  // ✅ Change this if your violations list route is different
+  const VIOLATIONS_LIST_ROUTE = "/violations";
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [row, setRow] = useState<Violation | null>(null);
@@ -67,6 +75,108 @@ export default function ViolationDetail() {
   const [hasLicense, setHasLicense] = useState(false);
   const [note, setNote] = useState("");
 
+  // =================== CAMERA UPLOADS ===================
+  const EVIDENCE_BUCKET = "violation_evidence";
+
+  const [violatorFile, setViolatorFile] = useState<File | null>(null);
+  const [vehicleFile, setVehicleFile] = useState<File | null>(null);
+
+  const [violatorPreview, setViolatorPreview] = useState<string>("");
+  const [vehiclePreview, setVehiclePreview] = useState<string>("");
+
+  const [violatorImgUrl, setViolatorImgUrl] = useState<string>("");
+  const [vehicleImgUrl, setVehicleImgUrl] = useState<string>("");
+
+  useEffect(() => {
+    if (!violatorFile) {
+      setViolatorPreview("");
+      return;
+    }
+    const u = URL.createObjectURL(violatorFile);
+    setViolatorPreview(u);
+    return () => URL.revokeObjectURL(u);
+  }, [violatorFile]);
+
+  useEffect(() => {
+    if (!vehicleFile) {
+      setVehiclePreview("");
+      return;
+    }
+    const u = URL.createObjectURL(vehicleFile);
+    setVehiclePreview(u);
+    return () => URL.revokeObjectURL(u);
+  }, [vehicleFile]);
+
+  async function uploadToBucket(file: File, path: string) {
+    const { error: upErr } = await supabase.storage
+      .from(EVIDENCE_BUCKET)
+      .upload(path, file, { cacheControl: "3600", upsert: true });
+
+    if (upErr) throw upErr;
+
+    const { data } = supabase.storage.from(EVIDENCE_BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  async function uploadViolatorNow() {
+    if (!row?.id || !violatorFile) return;
+    setError(null);
+    setUploading(true);
+
+    try {
+      const path = `violations/${row.id}/violator_${Date.now()}_${safeFilename(violatorFile.name)}`;
+      const url = await uploadToBucket(violatorFile, path);
+
+      const { data, error: uErr } = await supabase
+        .from("violations")
+        .update({ violator_image_url: url })
+        .eq("id", row.id)
+        .select("*")
+        .single();
+
+      if (uErr) throw uErr;
+
+      setRow(data as Violation);
+      setViolatorImgUrl(url);
+      setViolatorFile(null);
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message ?? "Failed to upload violator photo.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function uploadVehicleNow() {
+    if (!row?.id || !vehicleFile) return;
+    setError(null);
+    setUploading(true);
+
+    try {
+      const path = `violations/${row.id}/vehicle_${Date.now()}_${safeFilename(vehicleFile.name)}`;
+      const url = await uploadToBucket(vehicleFile, path);
+
+      const { data, error: uErr } = await supabase
+        .from("violations")
+        .update({ vehicle_image_url: url })
+        .eq("id", row.id)
+        .select("*")
+        .single();
+
+      if (uErr) throw uErr;
+
+      setRow(data as Violation);
+      setVehicleImgUrl(url);
+      setVehicleFile(null);
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message ?? "Failed to upload vehicle photo.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // =================== LOAD ===================
   useEffect(() => {
     let live = true;
 
@@ -94,28 +204,27 @@ export default function ViolationDetail() {
       setPlate(normalizePlate(v.license_plate ?? ""));
       setViolatorName(v.violator_name ?? "");
 
-      // If this violation is already linked to a violator, load extra details
+      setViolatorImgUrl(v.violator_image_url ?? "");
+      setVehicleImgUrl(v.vehicle_image_url ?? "");
+
+      // If linked violator exists, load extra details
       if (v.violator_id) {
         const { data: violator, error: violatorErr } = await supabase
           .from("violators")
-          .select(
-            "full_name, license_plate, address, contact_no, has_orcr, has_driver_license, note"
-          )
+          .select("full_name, license_plate, address, contact_no, has_orcr, has_driver_license, note")
           .eq("id", v.violator_id)
           .maybeSingle();
 
         if (!violatorErr && violator) {
-          if (violator.full_name && !v.violator_name) {
-            setViolatorName(violator.full_name);
-          }
-          if (violator.license_plate && !v.license_plate) {
+          if (violator.full_name && !v.violator_name) setViolatorName(violator.full_name);
+          if (violator.license_plate && !v.license_plate)
             setPlate(normalizePlate(violator.license_plate));
-          }
-          setAddress(violator.address ?? "");
-          setContactNo((violator.contact_no ?? "").replace(/[^0-9]/g, ""));
-          setHasOrCr(Boolean(violator.has_orcr));
-          setHasLicense(Boolean(violator.has_driver_license));
-          setNote(violator.note ?? "");
+
+          setAddress((violator as any).address ?? "");
+          setContactNo(((violator as any).contact_no ?? "").replace(/[^0-9]/g, ""));
+          setHasOrCr(Boolean((violator as any).has_orcr));
+          setHasLicense(Boolean((violator as any).has_driver_license));
+          setNote((violator as any).note ?? "");
         }
       }
 
@@ -123,26 +232,20 @@ export default function ViolationDetail() {
     }
 
     load();
-
     return () => {
       live = false;
     };
   }, [id]);
 
-  const isResolved = useMemo(
-    () => row?.status?.toLowerCase() === "resolved",
-    [row]
-  );
+  const isResolved = useMemo(() => row?.status?.toLowerCase() === "resolved", [row]);
 
   const plateError = useMemo(() => {
     if (!plate) return null;
-    return PLATE_REGEX.test(plate.trim())
-      ? null
-      : "Format must be ABC 123 or ABC 1234";
+    return PLATE_REGEX.test(plate.trim()) ? null : "Format must be ABC 123 or ABC 1234";
   }, [plate]);
 
   const contactError = useMemo(() => {
-    if (!contactNo) return null; // optional, but if present must be valid
+    if (!contactNo) return null;
     return PHONE_REGEX.test(contactNo)
       ? null
       : "Must be an 11-digit PH number starting with 09 (e.g., 09271351640).";
@@ -156,31 +259,18 @@ export default function ViolationDetail() {
     setError(null);
     if (!row) return;
 
-    // Prevent re-resolving
     if (row.status?.toLowerCase() === "resolved") {
       setError("This violation is already resolved.");
       return;
     }
 
-    // 1) Validate and normalize plate
     const nextPlate = normalizePlate(plate).trim();
+    if (!nextPlate) return setError("Please enter a license plate before resolving.");
+    if (!PLATE_REGEX.test(nextPlate)) return setError("Invalid plate format. Use ABC 123 or ABC 1234.");
 
-    if (!nextPlate) {
-      setError("Please enter a license plate before resolving.");
-      return;
-    }
-    if (!PLATE_REGEX.test(nextPlate)) {
-      setError("Invalid plate format. Use ABC 123 or ABC 1234.");
-      return;
-    }
-
-    // 2) Validate contact number (optional)
     const cleanedContact = contactNo ? contactNo.replace(/[^0-9]/g, "") : "";
     if (cleanedContact && !PHONE_REGEX.test(cleanedContact)) {
-      setError(
-        "Invalid contact number. Must be 11 digits and start with 09 (e.g., 09271351640)."
-      );
-      return;
+      return setError("Invalid contact number. Must be 11 digits and start with 09 (e.g., 09271351640).");
     }
 
     const trimmedName = violatorName.trim() || null;
@@ -191,20 +281,31 @@ export default function ViolationDetail() {
     setSaving(true);
 
     try {
-      // ✅ Get logged-in user for resolved_by
       const { data: authData, error: authErr } = await supabase.auth.getUser();
       const user = authData?.user;
-
       if (authErr || !user) {
         setError("You must be logged in to resolve a violation.");
         return;
       }
 
+      // If officer selected photos but didn’t press Upload, upload them here
+      let nextViolatorImgUrl = violatorImgUrl || null;
+      let nextVehicleImgUrl = vehicleImgUrl || null;
+
+      if (violatorFile) {
+        setUploading(true);
+        const path = `violations/${row.id}/violator_${Date.now()}_${safeFilename(violatorFile.name)}`;
+        nextViolatorImgUrl = await uploadToBucket(violatorFile, path);
+      }
+      if (vehicleFile) {
+        setUploading(true);
+        const path = `violations/${row.id}/vehicle_${Date.now()}_${safeFilename(vehicleFile.name)}`;
+        nextVehicleImgUrl = await uploadToBucket(vehicleFile, path);
+      }
+
       let violatorId = row.violator_id ?? null;
 
-      // --------------------------------------------------
-      // 3. CREATE / UPDATE VIOLATOR RECORD
-      // --------------------------------------------------
+      // CREATE/UPDATE violator record (your logic)
       if (violatorId) {
         const { error: updateErr } = await supabase
           .from("violators")
@@ -221,12 +322,11 @@ export default function ViolationDetail() {
           .eq("id", violatorId);
 
         if (updateErr) {
-          console.error("violators update error", updateErr);
+          console.error(updateErr);
           setError(`Failed to create or update violator record: ${updateErr.message}`);
           return;
         }
       } else {
-        // no violator_id yet → try find by plate
         const { data: existing, error: findErr } = await supabase
           .from("violators")
           .select("*")
@@ -234,7 +334,7 @@ export default function ViolationDetail() {
           .maybeSingle();
 
         if (findErr) {
-          console.error("violators lookup error", findErr);
+          console.error(findErr);
           setError(`Failed to create or update violator record: ${findErr.message}`);
           return;
         }
@@ -244,18 +344,18 @@ export default function ViolationDetail() {
           const { error: updateErr } = await supabase
             .from("violators")
             .update({
-              full_name: trimmedName ?? existing.full_name,
-              address: trimmedAddress ?? existing.address,
-              contact_no: trimmedContact ?? existing.contact_no,
+              full_name: trimmedName ?? (existing as any).full_name,
+              address: trimmedAddress ?? (existing as any).address,
+              contact_no: trimmedContact ?? (existing as any).contact_no,
               has_orcr: hasOrCr,
               has_driver_license: hasLicense,
-              note: trimmedNote ?? existing.note,
+              note: trimmedNote ?? (existing as any).note,
               updated_at: new Date().toISOString(),
             })
             .eq("id", existing.id);
 
           if (updateErr) {
-            console.error("violators update existing error", updateErr);
+            console.error(updateErr);
             setError(`Failed to create or update violator record: ${updateErr.message}`);
             return;
           }
@@ -275,18 +375,16 @@ export default function ViolationDetail() {
             .single();
 
           if (insertErr) {
-            console.error("violators insert error", insertErr);
+            console.error(insertErr);
             setError(`Failed to create or update violator record: ${insertErr.message}`);
             return;
           }
 
-          violatorId = inserted.id;
+          violatorId = (inserted as any).id;
         }
       }
 
-      // --------------------------------------------------
-      // 4. UPDATE VIOLATION RECORD  ✅ resolved_by + resolved_at
-      // --------------------------------------------------
+      // UPDATE violation record (+ photo urls)
       const { data: violationData, error: violationErr } = await supabase
         .from("violations")
         .update({
@@ -296,23 +394,37 @@ export default function ViolationDetail() {
           status: "resolved",
           resolved_by: user.id,
           resolved_at: new Date().toISOString(),
+          violator_image_url: nextViolatorImgUrl,
+          vehicle_image_url: nextVehicleImgUrl,
         })
         .eq("id", row.id)
         .select()
         .single();
 
       if (violationErr) {
-        console.error("violations update error", violationErr);
+        console.error(violationErr);
         setError(`Failed to save violation record: ${violationErr.message}`);
         return;
       }
 
-      // 5. Sync local state
-      setRow(violationData as Violation);
+      // Optional local sync (fine even if we navigate away)
+      const updated = violationData as Violation;
+      setRow(updated);
       setPlate(nextPlate);
       setViolatorName(trimmedName ?? "");
+      setViolatorImgUrl(updated.violator_image_url ?? (nextViolatorImgUrl ?? ""));
+      setVehicleImgUrl(updated.vehicle_image_url ?? (nextVehicleImgUrl ?? ""));
+      setViolatorFile(null);
+      setVehicleFile(null);
+
+      // ✅ GO BACK TO VIOLATIONS LIST AFTER SUCCESS
+      navigate(VIOLATIONS_LIST_ROUTE, { replace: true, state: { justResolvedId: row.id } });
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message ?? "Failed to resolve violation.");
     } finally {
       setSaving(false);
+      setUploading(false);
     }
   }
 
@@ -320,10 +432,7 @@ export default function ViolationDetail() {
   if (loading)
     return (
       <div className="min-h-screen px-4 py-4">
-        <button
-          onClick={() => navigate(-1)}
-          className="rounded-full px-4 py-2 border border-gray-300 text-sm"
-        >
+        <button onClick={() => navigate(-1)} className="rounded-full px-4 py-2 border border-gray-300 text-sm">
           Back
         </button>
         <div className="mt-6 text-sm text-gray-500">Loading violation…</div>
@@ -333,25 +442,17 @@ export default function ViolationDetail() {
   if (!row)
     return (
       <div className="min-h-screen px-4 py-4">
-        <button
-          onClick={() => navigate(-1)}
-          className="rounded-full px-4 py-2 border border-gray-300 text-sm"
-        >
+        <button onClick={() => navigate(-1)} className="rounded-full px-4 py-2 border border-gray-300 text-sm">
           Back
         </button>
-        <div className="mt-6 text-sm text-red-600">
-          {error ?? "Violation not found."}
-        </div>
+        <div className="mt-6 text-sm text-red-600">{error ?? "Violation not found."}</div>
       </div>
     );
 
   return (
     <div className="min-h-screen px-4 py-4">
       <div className="flex items-center justify-between">
-        <button
-          onClick={() => navigate(-1)}
-          className="rounded-full px-4 py-2 border border-gray-300 text-sm bg-white"
-        >
+        <button onClick={() => navigate(-1)} className="rounded-full px-4 py-2 border border-gray-300 text-sm bg-white">
           Back
         </button>
         <h1 className="text-lg font-semibold">Violation</h1>
@@ -360,15 +461,9 @@ export default function ViolationDetail() {
 
       <div className="mt-4 overflow-hidden rounded-2xl">
         {row.image_url ? (
-          <img
-            src={row.image_url}
-            alt="evidence"
-            className="w-full h-52 object-cover"
-          />
+          <img src={row.image_url} alt="evidence" className="w-full h-52 object-cover" />
         ) : (
-          <div className="w-full h-52 grid place-items-center bg-gray-100 text-gray-500 text-sm">
-            No Image
-          </div>
+          <div className="w-full h-52 grid place-items-center bg-gray-100 text-gray-500 text-sm">No Image</div>
         )}
       </div>
 
@@ -380,135 +475,200 @@ export default function ViolationDetail() {
         <FieldRow
           label="Status"
           value={cap(row.status)}
-          valueClass={
-            isResolved
-              ? "text-green-600 font-medium"
-              : "text-orange-600 font-medium"
-          }
+          valueClass={isResolved ? "text-green-600 font-medium" : "text-orange-600 font-medium"}
         />
 
-        {/* Violator Name */}
+        {/* Photos */}
+        <div className="mt-4 grid grid-cols-1 gap-3">
+          <div className="rounded-2xl border border-gray-200 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Violator photo</div>
+                <div className="text-xs text-gray-500">Capture the violator</div>
+              </div>
+              {violatorImgUrl ? (
+                <a href={violatorImgUrl} target="_blank" rel="noreferrer" className="text-xs text-orange-600 font-semibold">
+                  View
+                </a>
+              ) : (
+                <span className="text-xs text-gray-400">No upload</span>
+              )}
+            </div>
+
+            <div className="mt-3">
+              {violatorPreview || violatorImgUrl ? (
+                <img src={violatorPreview || violatorImgUrl} className="h-40 w-full rounded-xl object-cover bg-gray-50" />
+              ) : (
+                <div className="h-40 w-full rounded-xl bg-gray-50 grid place-items-center text-xs text-gray-400">
+                  No violator photo selected
+                </div>
+              )}
+            </div>
+
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                id="violator-photo"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => setViolatorFile(e.target.files?.[0] ?? null)}
+              />
+              <label
+                htmlFor="violator-photo"
+                className="flex-1 text-center rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold bg-white hover:bg-gray-50"
+              >
+                Take photo
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setViolatorFile(null)}
+                className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold bg-white hover:bg-gray-50 disabled:opacity-50"
+                disabled={!violatorFile}
+              >
+                Clear
+              </button>
+
+              <button
+                type="button"
+                onClick={uploadViolatorNow}
+                className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+                disabled={!violatorFile || uploading || saving}
+              >
+                {uploading ? "Uploading…" : "Upload"}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">Vehicle photo</div>
+                <div className="text-xs text-gray-500">Capture the vehicle</div>
+              </div>
+              {vehicleImgUrl ? (
+                <a href={vehicleImgUrl} target="_blank" rel="noreferrer" className="text-xs text-orange-600 font-semibold">
+                  View
+                </a>
+              ) : (
+                <span className="text-xs text-gray-400">No upload</span>
+              )}
+            </div>
+
+            <div className="mt-3">
+              {vehiclePreview || vehicleImgUrl ? (
+                <img src={vehiclePreview || vehicleImgUrl} className="h-40 w-full rounded-xl object-cover bg-gray-50" />
+              ) : (
+                <div className="h-40 w-full rounded-xl bg-gray-50 grid place-items-center text-xs text-gray-400">
+                  No vehicle photo selected
+                </div>
+              )}
+            </div>
+
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                id="vehicle-photo"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => setVehicleFile(e.target.files?.[0] ?? null)}
+              />
+              <label
+                htmlFor="vehicle-photo"
+                className="flex-1 text-center rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold bg-white hover:bg-gray-50"
+              >
+                Take photo
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setVehicleFile(null)}
+                className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold bg-white hover:bg-gray-50 disabled:opacity-50"
+                disabled={!vehicleFile}
+              >
+                Clear
+              </button>
+
+              <button
+                type="button"
+                onClick={uploadVehicleNow}
+                className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+                disabled={!vehicleFile || uploading || saving}
+              >
+                {uploading ? "Uploading…" : "Upload"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Inputs */}
         <div className="mt-4">
-          <label className="block text-xs text-gray-500 mb-1">
-            Violator Name
-          </label>
+          <label className="block text-xs text-gray-500 mb-1">Violator Name</label>
           <input
             value={violatorName}
             onChange={(e) => setViolatorName(e.target.value)}
             placeholder="e.g., Juan Dela Cruz"
-            className={`w-full rounded-xl border p-3 text-sm ${
-              violatorName &&
-              !/^[A-Za-zÀ-ÖØ-öø-ÿÑñ'.\-\s]{2,80}$/.test(violatorName)
-                ? "border-red-400 focus:ring-red-200"
-                : "border-gray-300"
-            }`}
+            className="w-full rounded-xl border border-gray-300 p-3 text-sm"
             maxLength={80}
-            autoCapitalize="words"
-            autoCorrect="off"
-            spellCheck={false}
           />
-          {violatorName &&
-            !/^[A-Za-zÀ-ÖØ-öø-ÿÑñ'.\-\s]{2,80}$/.test(violatorName) && (
-              <div className="mt-1 text-xs text-red-600">
-                Use only letters, spaces, dot, hyphen, and apostrophe (2–80
-                chars).
-              </div>
-            )}
         </div>
 
-        {/* License Plate */}
         <div className="mt-4">
-          <label className="block text-xs text-gray-500 mb-1">
-            License Plate
-          </label>
+          <label className="block text-xs text-gray-500 mb-1">License Plate</label>
           <input
             value={plate}
             onChange={onPlateChange}
             placeholder="ABC 1234"
             className={`w-full rounded-xl border p-3 text-sm uppercase ${
-              plate && plateError
-                ? "border-red-400 focus:ring-red-200"
-                : "border-gray-300"
+              plate && plateError ? "border-red-400" : "border-gray-300"
             }`}
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
             maxLength={8}
             inputMode="text"
-            title="Format: ABC 123 or ABC 1234"
           />
-          {plate && plateError && (
-            <div className="mt-1 text-xs text-red-600">{plateError}</div>
-          )}
+          {plate && plateError && <div className="mt-1 text-xs text-red-600">{plateError}</div>}
         </div>
 
-        {/* Address */}
         <div className="mt-4">
           <label className="block text-xs text-gray-500 mb-1">Address</label>
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="House / Block / Street, Barangay, City"
             className="w-full rounded-xl border border-gray-300 p-3 text-sm"
             maxLength={200}
-            autoCapitalize="sentences"
-            autoCorrect="off"
-            spellCheck={false}
           />
         </div>
 
-        {/* Contact Number */}
         <div className="mt-4">
-          <label className="block text-xs text-gray-500 mb-1">
-            Contact Number
-          </label>
+          <label className="block text-xs text-gray-500 mb-1">Contact Number</label>
           <input
             value={contactNo}
-            onChange={(e) => {
-              const val = e.target.value.replace(/[^0-9]/g, "");
-              setContactNo(val);
-            }}
+            onChange={(e) => setContactNo(e.target.value.replace(/[^0-9]/g, ""))}
             placeholder="09171234567"
             className={`w-full rounded-xl border p-3 text-sm ${
-              contactNo && contactError
-                ? "border-red-400 focus:ring-red-200"
-                : "border-gray-300"
+              contactNo && contactError ? "border-red-400" : "border-gray-300"
             }`}
             maxLength={11}
             inputMode="numeric"
-            autoCorrect="off"
-            spellCheck={false}
           />
-          {contactNo && contactError && (
-            <div className="mt-1 text-xs text-red-600">{contactError}</div>
-          )}
+          {contactNo && contactError && <div className="mt-1 text-xs text-red-600">{contactError}</div>}
         </div>
 
-        {/* Notes */}
         <div className="mt-4">
-          <label className="block text-xs text-gray-500 mb-1">
-            Notes (optional, max 500 characters)
-          </label>
+          <label className="block text-xs text-gray-500 mb-1">Notes</label>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 500))}
-            placeholder="Additional details, driver remarks, plate visibility issues, etc."
             className="w-full rounded-xl border border-gray-300 p-3 text-sm resize-none"
             rows={4}
             maxLength={500}
-            autoCorrect="on"
-            spellCheck={true}
           />
-          <div className="text-right text-[11px] text-gray-400 mt-1">
-            {note.length}/500
-          </div>
+          <div className="text-right text-[11px] text-gray-400 mt-1">{note.length}/500</div>
         </div>
 
-        {/* Documents Presented */}
         <div className="mt-4">
-          <span className="block text-xs text-gray-500 mb-1">
-            Documents Presented
-          </span>
+          <span className="block text-xs text-gray-500 mb-1">Documents Presented</span>
           <div className="flex items-center gap-4 text-xs">
             <label className="inline-flex items-center gap-2">
               <input
@@ -534,17 +694,16 @@ export default function ViolationDetail() {
         {error && <div className="mt-3 text-xs text-red-600">{error}</div>}
       </div>
 
-      {/* Single action button */}
       <button
         onClick={handleResolve}
-        disabled={saving || !plate || !!plateError || (contactNo && !!contactError)}
+        disabled={saving || uploading || !plate || !!plateError || (contactNo && !!contactError)}
         className={`mt-4 w-full rounded-2xl px-4 py-4 text-white font-semibold transition ${
-          saving || !plate || !!plateError || (contactNo && !!contactError)
+          saving || uploading || !plate || !!plateError || (contactNo && !!contactError)
             ? "bg-orange-300 cursor-not-allowed"
             : "bg-orange-600 hover:bg-orange-700"
         }`}
       >
-        {saving ? "Saving…" : "Mark as Resolved"}
+        {saving ? "Saving…" : uploading ? "Uploading…" : "Mark as Resolved"}
       </button>
     </div>
   );

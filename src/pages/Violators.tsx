@@ -27,9 +27,8 @@ type ViolationHistoryRow = {
   license_plate: string | null;
   violator_id?: string | null;
 
-  // ✅ possible image columns on violations
-  driver_image_url?: string | null;
-  vehicle_image_url?: string | null;
+  // ✅ real image columns that exist in your DB
+  violator_image_url?: string | null;
   image_url?: string | null;
 };
 
@@ -120,13 +119,11 @@ export default function Violators() {
         }
 
         // ✅ Fetch thumbnails (latest photo per violator)
-        // Do sequentially to reduce DB burst; small list is fine.
         for (const r of list) {
           if (cancelled) break;
           if (!r?.id) continue;
 
           const plate = norm(r.license_plate);
-
           const img = await fetchLatestImageForViolator(r.id, plate);
           if (cancelled) break;
 
@@ -195,14 +192,13 @@ export default function Violators() {
     return out;
   }
 
-  // ✅ Latest image for violator (driver -> vehicle -> evidence fallback)
+  // ✅ Latest image for violator: violator_image_url -> image_url fallback
   async function fetchLatestImageForViolator(violatorId: string, plate: string) {
     const cleanPlate = norm(plate);
 
-    // Try via violator_id first; fallback via plate match (for older rows)
     const { data, error } = await supabase
       .from(VIOLATIONS_TABLE)
-      .select("driver_image_url,vehicle_image_url,image_url,timestamp,license_plate,violator_id")
+      .select("violator_image_url,image_url,timestamp,license_plate,violator_id")
       .or(
         cleanPlate
           ? `violator_id.eq.${violatorId},license_plate.ilike.${cleanPlate}`
@@ -218,8 +214,7 @@ export default function Violators() {
     }
 
     const row = data as any;
-
-    return row?.driver_image_url || row?.vehicle_image_url || row?.image_url || null;
+    return row?.violator_image_url || row?.image_url || null;
   }
 
   async function fetchViolationHistoryForViolator(violatorId: string, plate: string) {
@@ -227,7 +222,7 @@ export default function Violators() {
     const q1 = supabase
       .from(VIOLATIONS_TABLE)
       .select(
-        "id,timestamp,status,street_name,violation_type,vehicle_class,license_plate,violator_id,driver_image_url,vehicle_image_url,image_url"
+        "id,timestamp,status,street_name,violation_type,vehicle_class,license_plate,violator_id,violator_image_url,image_url"
       )
       .eq("violator_id", violatorId)
       .order("timestamp", { ascending: false })
@@ -246,7 +241,7 @@ export default function Violators() {
     const q2 = supabase
       .from(VIOLATIONS_TABLE)
       .select(
-        "id,timestamp,status,street_name,violation_type,vehicle_class,license_plate,violator_id,driver_image_url,vehicle_image_url,image_url"
+        "id,timestamp,status,street_name,violation_type,vehicle_class,license_plate,violator_id,violator_image_url,image_url"
       )
       .ilike("license_plate", p)
       .order("timestamp", { ascending: false })
@@ -259,6 +254,7 @@ export default function Violators() {
   }
 
   async function toggleHistory(violatorId: string, plate: string) {
+    // collapse
     if (expandedId === violatorId) {
       setExpandedId(null);
       return;
@@ -266,6 +262,7 @@ export default function Violators() {
 
     setExpandedId(violatorId);
 
+    // already cached
     if (historyByViolator[violatorId]) return;
 
     setHistoryLoadingId(violatorId);
@@ -412,7 +409,7 @@ export default function Violators() {
               return (
                 <div key={r.id ?? `${plate}-${idx}`} className="p-3">
                   <div className="flex items-start gap-3">
-                    {/* ✅ Thumbnail */}
+                    {/* Thumbnail */}
                     <div className="shrink-0 h-14 w-14 rounded-xl overflow-hidden border border-neutral-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800">
                       {thumb ? (
                         <img

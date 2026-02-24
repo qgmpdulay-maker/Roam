@@ -27,9 +27,14 @@ type ViolationHistoryRow = {
   license_plate: string | null;
   violator_id?: string | null;
 
-  // ✅ your actual columns
+  // ✅ your actual columns (not used in history list, but used in latest-meta fetch)
   violator_image_url?: string | null;
   image_url?: string | null;
+};
+
+type LatestViolationMeta = {
+  timestamp: string | null;
+  street_name: string | null;
 };
 
 function norm(s: any) {
@@ -68,6 +73,7 @@ export default function Violators() {
 
   const [plateToVehicle, setPlateToVehicle] = useState<Record<string, string>>({});
   const [violatorThumbs, setViolatorThumbs] = useState<Record<string, string>>({});
+  const [latestMetaByViolator, setLatestMetaByViolator] = useState<Record<string, LatestViolationMeta>>({});
 
   const [q, setQ] = useState("");
   const [vehicleFilter, setVehicleFilter] = useState<string>("all");
@@ -77,7 +83,7 @@ export default function Violators() {
   const [historyLoadingId, setHistoryLoadingId] = useState<string | null>(null);
   const [historyErrorById, setHistoryErrorById] = useState<Record<string, string>>({});
 
-  // ✅ NEW: lightbox state
+  // ✅ Lightbox state
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const VIOLATORS_TABLE = "violators";
@@ -106,29 +112,38 @@ export default function Violators() {
 
         const plates = list.map((r) => norm(r.license_plate)).filter(Boolean);
 
+        // vehicle types
         if (!cancelled) {
           const mapping = await fetchVehicleTypesForPlates(plates);
           if (!cancelled) setPlateToVehicle(mapping);
         }
 
-        // thumbnails
+        // latest thumbs + latest meta (timestamp/street)
         for (const r of list) {
           if (cancelled) break;
           if (!r?.id) continue;
 
           const plate = norm(r.license_plate);
-          const img = await fetchLatestImageForViolator(r.id, plate);
+          const meta = await fetchLatestViolationMetaForViolator(r.id, plate);
           if (cancelled) break;
 
-          if (img) setViolatorThumbs((prev) => ({ ...prev, [r.id]: img }));
+          if (meta?.image) {
+            setViolatorThumbs((prev) => ({ ...prev, [r.id]: meta.image }));
+          }
+
+          if (meta?.timestamp || meta?.street_name) {
+            setLatestMetaByViolator((prev) => ({
+              ...prev,
+              [r.id]: { timestamp: meta.timestamp ?? null, street_name: meta.street_name ?? null },
+            }));
+          }
         }
       } catch (e: any) {
         console.error("Violators fetch error:", e);
         if (!cancelled) setRows([]);
-        if (!cancelled)
-          setError(
-            e?.message ?? `Failed to load ${VIOLATORS_TABLE}. Check table name and RLS.`
-          );
+        if (!cancelled) {
+          setError(e?.message ?? `Failed to load ${VIOLATORS_TABLE}. Check table name and RLS.`);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -178,12 +193,12 @@ export default function Violators() {
     return out;
   }
 
-  async function fetchLatestImageForViolator(violatorId: string, plate: string) {
+  async function fetchLatestViolationMetaForViolator(violatorId: string, plate: string) {
     const cleanPlate = norm(plate);
 
     const { data, error } = await supabase
       .from(VIOLATIONS_TABLE)
-      .select("violator_image_url,image_url,timestamp,license_plate,violator_id")
+      .select("violator_image_url,image_url,timestamp,street_name,license_plate,violator_id")
       .or(
         cleanPlate
           ? `violator_id.eq.${violatorId},license_plate.ilike.${cleanPlate}`
@@ -196,7 +211,12 @@ export default function Violators() {
     if (error) return null;
 
     const row = data as any;
-    return row?.violator_image_url || row?.image_url || null;
+
+    return {
+      image: row?.violator_image_url || row?.image_url || null,
+      timestamp: (row?.timestamp ?? null) as string | null,
+      street_name: (row?.street_name ?? null) as string | null,
+    };
   }
 
   async function fetchViolationHistoryForViolator(violatorId: string, plate: string) {
@@ -265,6 +285,7 @@ export default function Violators() {
     return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [rows, plateToVehicle]);
 
+  // ✅ Search now matches: plate, name, latest street, latest violation date
   const filtered = useMemo(() => {
     const query = normLower(q);
 
@@ -273,12 +294,28 @@ export default function Violators() {
       const name = normLower(r.full_name);
 
       const vt = normLower(plateToVehicle[norm(r.license_plate)]);
-      const matchQuery = !query || plate.includes(query) || name.includes(query);
       const matchVehicle = vehicleFilter === "all" || normLower(vehicleFilter) === vt;
 
-      return matchQuery && matchVehicle;
+      if (!query) return matchVehicle;
+
+      const meta = latestMetaByViolator[r.id];
+      const street = normLower(meta?.street_name);
+
+      const iso = norm(meta?.timestamp);
+      const yyyyMmDd = iso ? iso.slice(0, 10) : "";
+      const pretty = iso ? prettyDate(iso) : "";
+
+      const matchQuery =
+        plate.includes(query) ||
+        name.includes(query) ||
+        street.includes(query) ||
+        normLower(iso).includes(query) ||
+        normLower(yyyyMmDd).includes(query) ||
+        normLower(pretty).includes(query);
+
+      return matchVehicle && matchQuery;
     });
-  }, [rows, q, vehicleFilter, plateToVehicle]);
+  }, [rows, q, vehicleFilter, plateToVehicle, latestMetaByViolator]);
 
   return (
     <div className="page space-y-4">
@@ -288,10 +325,7 @@ export default function Violators() {
           className="fixed inset-0 z-[999] bg-black/70 p-4 flex items-center justify-center"
           onClick={() => setLightboxUrl(null)}
         >
-          <div
-            className="relative w-full max-w-md"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="absolute -top-3 -right-3 rounded-full bg-white p-2 shadow"
@@ -316,6 +350,12 @@ export default function Violators() {
           <p className="text-sm text-muted">
             {loading ? "Loading…" : `${filtered.length} result(s)`} • {rows.length} total
           </p>
+
+          {error ? (
+            <div className="mt-2 rounded-xl border border-red-200 bg-red-50 p-3 text-red-700 text-sm">
+              {error}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -326,7 +366,7 @@ export default function Violators() {
             <label className="roam-label">Search</label>
             <input
               className="roam-input mt-1"
-              placeholder="Search plate number or name…"
+              placeholder="Search plate, name, street, or date (e.g. 2026-02-24)…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -372,11 +412,14 @@ export default function Violators() {
               const histError = historyErrorById[r.id];
 
               const thumb = violatorThumbs[r.id];
+              const meta = latestMetaByViolator[r.id];
+              const latestStreet = norm(meta?.street_name);
+              const latestWhen = prettyDate(meta?.timestamp);
 
               return (
                 <div key={r.id ?? `${plate}-${idx}`} className="p-3">
                   <div className="flex items-start gap-3">
-                    {/* ✅ Clickable thumbnail */}
+                    {/* Clickable thumbnail */}
                     <button
                       type="button"
                       className="shrink-0 h-14 w-14 rounded-xl overflow-hidden border border-neutral-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800"
@@ -405,11 +448,7 @@ export default function Violators() {
                             {plate || "— Plate —"}
                           </div>
 
-                          {vehicleType ? (
-                            <span className="pill">{vehicleType}</span>
-                          ) : (
-                            <span className="pill">Unknown vehicle</span>
-                          )}
+                          {vehicleType ? <span className="pill">{vehicleType}</span> : <span className="pill">Unknown vehicle</span>}
                         </div>
 
                         <div className="mt-1 text-sm text-sub truncate">
@@ -418,6 +457,12 @@ export default function Violators() {
 
                         <div className="mt-1 text-xs text-muted">
                           Added: {prettyDate(created)}
+                        </div>
+
+                        {/* Optional: show latest violation meta so users see what matched */}
+                        <div className="mt-1 text-[11px] text-muted">
+                          Latest violation: {latestWhen}
+                          {latestStreet ? <span> • {latestStreet}</span> : null}
                         </div>
                       </div>
 

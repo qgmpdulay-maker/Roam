@@ -9,9 +9,10 @@ import {
 import AppLayout from "@/layouts/AppLayout";
 import Splash from "@/pages/Splash";
 import Login from "@/pages/Login";
-import Verify from "@/pages/Verify";
 import Forgot from "@/pages/Forgot";
 import Register from "@/pages/Register";
+import Verify from "@/pages/Verify";
+import SetPassword from "@/pages/SetPassword";
 import AuthCallback from "@/pages/AuthCallback";
 import Reset from "@/pages/Reset";
 import Dashboard from "@/pages/Dashboard";
@@ -24,88 +25,45 @@ import Violators from "@/pages/Violators";
 
 import { useAuth } from "@/store/auth";
 
-// simple gate for auth-only pages
 function Protected({ children }: { children: JSX.Element }) {
   const { user, initialized } = useAuth();
-  if (!initialized) return null; // small splash could be used here
+
+  if (!initialized) return null;
   return user ? children : <Navigate to="/login" replace />;
 }
 
 export const router = createBrowserRouter(
   createRoutesFromElements(
-    <Route element={<AppLayout />}>
-      {/* Public */}
+    <>
+      {/* Public routes */}
       <Route path="/" element={<Splash />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/verify" element={<Verify />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/verify" element={<Verify />} />
+      <Route path="/set-password" element={<SetPassword />} />
       <Route path="/forgot" element={<Forgot />} />
       <Route path="/reset" element={<Reset />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
 
-      {/* Protected */}
+      {/* Protected routes with app layout */}
       <Route
-        path="/dashboard"
         element={
           <Protected>
-            <Dashboard />
+            <AppLayout />
           </Protected>
         }
-      />
-      <Route
-        path="/violations"
-        element={
-          <Protected>
-            <Violations />
-          </Protected>
-        }
-      />
-      <Route
-        path="/violation/:id"
-        element={
-          <Protected>
-            <ViolationDetail />
-          </Protected>
-        }
-      />
+      >
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/violations" element={<Violations />} />
+        <Route path="/violation/:id" element={<ViolationDetail />} />
+        <Route path="/violators" element={<Violators />} />
+        <Route path="/statistics" element={<Statistics />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
 
-      {/* ✅ NEW: Violators page */}
-      <Route
-        path="/violators"
-        element={
-          <Protected>
-            <Violators />
-          </Protected>
-        }
-      />
-
-      <Route
-        path="/statistics"
-        element={
-          <Protected>
-            <Statistics />
-          </Protected>
-        }
-      />
-      <Route
-        path="/profile"
-        element={
-          <Protected>
-            <Profile />
-          </Protected>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <Protected>
-            <Settings />
-          </Protected>
-        }
-      />
-
+      {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Route>
+    </>
   )
 );

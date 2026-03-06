@@ -16,6 +16,8 @@ export default function TabBar() {
   return (
     <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-white border-t border-neutral-200">
       <nav className="grid grid-cols-6 py-2">
+        
+        {/* Dashboard */}
         <NavLink
           to="/dashboard"
           className={({ isActive }) => `${link} ${isActive ? active : base}`}
@@ -23,7 +25,8 @@ export default function TabBar() {
           <Home size={20} />
           <span>Home</span>
         </NavLink>
-
+        
+        {/* Violations */}
         <NavLink
           to="/violations"
           className={({ isActive }) => `${link} ${isActive ? active : base}`}
@@ -32,7 +35,7 @@ export default function TabBar() {
           <span>Violations</span>
         </NavLink>
 
-        {/* ✅ NEW: Violators */}
+        {/* Violators */}
         <NavLink
           to="/violators"
           className={({ isActive }) => `${link} ${isActive ? active : base}`}
@@ -41,6 +44,7 @@ export default function TabBar() {
           <span>Violators</span>
         </NavLink>
 
+        {/* Statistics */}
         <NavLink
           to="/statistics"
           className={({ isActive }) => `${link} ${isActive ? active : base}`}
@@ -49,6 +53,7 @@ export default function TabBar() {
           <span>Stats</span>
         </NavLink>
 
+        {/* Profile*/}
         <NavLink
           to="/profile"
           className={({ isActive }) => `${link} ${isActive ? active : base}`}
@@ -57,6 +62,7 @@ export default function TabBar() {
           <span>Profile</span>
         </NavLink>
 
+        {/* Settings */}
         <NavLink
           to="/settings"
           className={({ isActive }) => `${link} ${isActive ? active : base}`}

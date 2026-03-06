@@ -1,94 +1,146 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
 export default function Verify() {
   const nav = useNavigate();
+  const [params] = useSearchParams();
+
+  const [email, setEmail] = useState(params.get("email") || "");
   const [code, setCode] = useState("");
-  const [email, setEmail] = useState("");
-  const [info, setInfo] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const pending = localStorage.getItem("roam_pending_email") || "";
-    setEmail(pending);
-    if (!pending) nav("/login", { replace: true });
-  }, [nav]);
+    const e = params.get("email");
+    if (e) setEmail(e);
+  }, [params]);
 
-  async function handleVerify(e: React.FormEvent) {
+  async function verifyCode(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setMsg("");
     setError("");
 
+    const eTrim = email.trim();
+    const token = code.trim();
+
+    if (!eTrim) {
+      setError("Missing email. Please go back and enter your email again.");
+      return;
+    }
+    if (!/^\d{6}$/.test(token)) {
+      setError("Enter the 6-digit code from your email.");
+      return;
+    }
+
+    setLoading(true);
     try {
       const { error: vErr } = await supabase.auth.verifyOtp({
-        email,
-        token: code,
-        type: "email", // verifyOtp DOES need 'type'
+        email: eTrim,
+        token,
+        type: "email",
       });
+
       if (vErr) {
-        setError(vErr.message || "Invalid code. Please try again.");
+        setError(`Invalid or expired code: ${vErr.message}`);
+        console.error("verifyOtp error:", vErr);
         return;
       }
-      localStorage.removeItem("roam_otp_required");
-      localStorage.removeItem("roam_pending_email");
-      nav("/dashboard", { replace: true });
-    } catch (err: any) {
-      console.error(err);
-      setError("Unexpected error. Try again.");
+
+      // Confirm session exists before proceeding
+      const { data: s } = await supabase.auth.getSession();
+      if (!s.session) {
+        setError("Verified, but session not ready. Please try again.");
+        return;
+      }
+
+      setMsg("Verified! Redirecting…");
+      setTimeout(() => nav("/set-password"), 400);
     } finally {
       setLoading(false);
     }
   }
 
   async function resend() {
-    setInfo(""); setError("");
-    if (!email) return;
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false }, // no `type` here
-    });
-    if (error) setError(error.message || "Failed to resend code.");
-    else setInfo("A new code has been sent.");
+    setMsg("");
+    setError("");
+
+    const eTrim = email.trim();
+    if (!eTrim) {
+      setError("Missing email. Please go back and enter your email again.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error: otpErr } = await supabase.auth.signInWithOtp({ email: eTrim });
+      if (otpErr) {
+        setError(`Could not resend code: ${otpErr.message}`);
+        console.error("resend otp error:", otpErr);
+        return;
+      }
+      setMsg("Code resent. Check inbox/spam.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="min-h-screen grid place-items-center bg-white px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-gray-900 text-center mb-1">Enter Verification Code</h1>
-        <p className="text-center text-gray-600 mb-6">
-          We emailed a 6-digit code to <span className="font-medium">{email}</span>.
-        </p>
+        <h1 className="text-3xl font-bold text-orange-600 mb-1 text-center">ROAM</h1>
+        <p className="text-center text-gray-600 mb-6">Enter Verification Code</p>
 
-        <form onSubmit={handleVerify} className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+        <form
+          onSubmit={verifyCode}
+          className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3"
+        >
+          {/* show email so they know where the code was sent */}
+          <input
+            type="email"
+            className="w-full rounded-xl border border-gray-300 p-3 text-sm bg-gray-50"
+            value={email}
+            readOnly
+          />
+
           <input
             inputMode="numeric"
             placeholder="6-digit code"
-            className="w-full rounded-xl border border-gray-300 p-3 text-xl tracking-widest text-center"
+            className="w-full rounded-xl border border-gray-300 p-3 text-sm tracking-widest text-center"
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            required
+            maxLength={6}
           />
+
           <button
             type="submit"
-            disabled={loading || code.length !== 6}
+            disabled={loading}
             className="w-full rounded-2xl bg-orange-600 py-2.5 text-white font-semibold active:bg-orange-700 disabled:opacity-50"
           >
-            {loading ? "Verifying…" : "Verify"}
+            {loading ? "Verifying…" : "Verify code"}
           </button>
 
-          {error && <p className="text-center text-sm text-red-500">{error}</p>}
-          {info && <p className="text-center text-sm text-green-600">{info}</p>}
+          <button
+            type="button"
+            onClick={resend}
+            disabled={loading}
+            className="w-full rounded-2xl border border-gray-300 text-gray-800 py-2.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
+          >
+            Resend code
+          </button>
 
-          <div className="flex items-center justify-between pt-1">
-            <button type="button" onClick={resend} className="text-sm text-gray-600 hover:underline">
-              Resend code
-            </button>
-            <button type="button" onClick={() => nav("/login")} className="text-sm text-orange-600 hover:underline">
-              Back
-            </button>
-          </div>
+          {/* Back to email page */}
+          <button
+            type="button"
+            onClick={() => nav("/register")}
+            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
+          >
+            ← Back to Email
+          </button>
+
+          {msg && <p className="text-center text-sm text-green-600">{msg}</p>}
+          {error && <p className="text-center text-sm text-red-600">{error}</p>}
         </form>
       </div>
     </div>

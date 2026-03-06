@@ -69,7 +69,6 @@ export default function Violations() {
       .subscribe();
     channelRef.current = ch;
     return () => {
-      // call unsubscribe but do not return the Promise to keep the cleanup synchronous
       void ch.unsubscribe();
     };
   }, []);
@@ -84,7 +83,6 @@ export default function Violations() {
   }, [rows, statusFilter, streetFilter]);
 
   const grouped = useMemo(() => {
-    // Only group when viewing all streets; otherwise just return one group
     const map = new Map<string, Violation[]>();
     const push = (label: string, v: Violation) => {
       const arr = map.get(label) ?? [];
@@ -107,7 +105,6 @@ export default function Violations() {
         return ia - ib;
       });
     } else {
-      // Single group with selected street label
       map.set(streetLabel(streetFilter), filtered);
       return Array.from(map.entries());
     }
@@ -234,8 +231,6 @@ export default function Violations() {
           </div>
         )}
       </div>
-
-      {/* Spacer so bottom nav doesn’t overlap */}
       <div className="h-24" />
     </div>
   );

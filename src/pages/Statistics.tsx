@@ -21,9 +21,7 @@ import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// =============================================================================
 // Types
-// =============================================================================
 type Violation = {
   id: string;
   timestamp: string | null;
@@ -42,14 +40,10 @@ type ZonePolygon = {
   baseColor?: string | null;
 };
 
-// =============================================================================
 // Site anchor
-// =============================================================================
 const SITE_CENTER: LatLngExpression = [7.08029007530404, 125.62265921360454];
 
-// =============================================================================
 // Real GPS street polygons (Leaflet expects [lat, lng])
-// =============================================================================
 const STREET_ZONES: ZonePolygon[] = [
   {
     id: "bangoy_soliman",
@@ -80,9 +74,7 @@ const STREET_ZONES: ZonePolygon[] = [
   },
 ];
 
-// =============================================================================
 // Helpers
-// =============================================================================
 const VEHICLE_COLORS: Record<string, string> = {
   motorcycle: "#7C3AED",
   "pickup truck": "#DB2777",
@@ -179,7 +171,7 @@ function getManilaYMD() {
   return `${y}-${m}-${d}`;
 }
 
-// Manila “today full day” in UTC ISO (00:00–23:59:59.999 Manila)
+// Manila full day
 function manilaDayToUTCISORange(yyyy_mm_dd: string) {
   const startISO = new Date(`${yyyy_mm_dd}T00:00:00+08:00`).toISOString();
   const endISO = new Date(`${yyyy_mm_dd}T23:59:59.999+08:00`).toISOString();
@@ -187,8 +179,8 @@ function manilaDayToUTCISORange(yyyy_mm_dd: string) {
 }
 
 // 8 hours/day window (Manila)
-const WINDOW_START_HOUR = 10; // 10:00
-const WINDOW_END_HOUR = 18; // 18:00
+const WINDOW_START_HOUR = 10; 
+const WINDOW_END_HOUR = 18; 
 const WINDOW_LABEL = `${formatHourLabel(WINDOW_START_HOUR)} – ${formatHourLabel(WINDOW_END_HOUR)}`;
 
 function isWithinManilaWindow(tsISO: string) {
@@ -197,9 +189,7 @@ function isWithinManilaWindow(tsISO: string) {
   return h >= WINDOW_START_HOUR && h < WINDOW_END_HOUR;
 }
 
-// =============================================================================
 // Map helpers
-// =============================================================================
 function MapFitBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
   const map = useMap();
 
@@ -215,9 +205,7 @@ function MapFitBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
   return null;
 }
 
-// =============================================================================
 // Chart tuning
-// =============================================================================
 const X_AXIS_PAD = { left: 26, right: 26 };
 const Y_AXIS_WIDTH = 36;
 const BAR_SIZE = 38;
@@ -237,9 +225,7 @@ const Y_AXIS_COMMON = {
   width: Y_AXIS_WIDTH,
 };
 
-// =============================================================================
 // Component
-// =============================================================================
 export default function Statistics() {
   // Charts data (default: last 30 days)
   const [violationsCharts, setViolationsCharts] = useState<Violation[]>([]);
@@ -305,10 +291,7 @@ export default function Statistics() {
 
     setAppliedWindowStartISO(sISO);
     setAppliedWindowEndISO(eISO);
-
-    // label: if user applies a range, show it as that range’s start date (or just show rangeLabel in UI)
-    // We’ll keep a friendly “window date label” as Manila today only when cleared.
-    setAppliedWindowManilaDay(""); // empty means "range mode"
+    setAppliedWindowManilaDay("");
   }
 
   function onClearDates() {
@@ -427,7 +410,7 @@ export default function Statistics() {
     return violationsWindowRange.filter((v) => v.timestamp && isWithinManilaWindow(v.timestamp));
   }, [violationsWindowRange]);
 
-  // Map a violation -> which street zone it belongs to
+  // Map a violation which street zone it belongs to
   function zoneIdForViolation(v: Violation): string | null {
     const text = normalize(v.zone_name) || normalize(v.street_name);
     if (!text) return null;
@@ -499,7 +482,7 @@ export default function Statistics() {
     }));
   }, [windowViolations]);
 
-  // Charts computations (use violationsCharts)
+  // Charts computations
   const classCounts = useMemo(() => {
     const map = new Map<string, number>();
     for (const v of violationsCharts) {
@@ -615,7 +598,7 @@ export default function Statistics() {
         </div>
       </div>
 
-      {/* Heatmap tile */}
+      {/* Chloropleth tile */}
       <div className="card p-4">
         <div className="flex items-start justify-between gap-3">
           <div>

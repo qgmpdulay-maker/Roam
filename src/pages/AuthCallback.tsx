@@ -2,16 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
-/**
- * Handles Supabase email links:
- *   - type=signup   (email confirmation)
- *   - type=recovery (password reset)
- *   - magic link variants with ?code=
- *
- * After exchanging the code for a session, we route:
- *   - recovery  -> /reset
- *   - signup    -> /login (or /dashboard if you prefer)
- */
+//Handles Supabase email links
 export default function AuthCallback() {
   const nav = useNavigate();
   const [params] = useSearchParams();
@@ -22,22 +13,16 @@ export default function AuthCallback() {
       try {
         const code = params.get("code");
         const type = (params.get("type") || "").toLowerCase();
-
-        // Newer Supabase links include a `code` param (PKCE).
-        // This exchanges the one-time code for a real session.
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
         }
 
         if (type === "recovery") {
-          // Password reset flow (we already send users to /reset separately)
           nav("/reset", { replace: true });
           return;
         }
-
-        // Default: confirmed signup / magic link → go to Login
-        // (change to /dashboard if you want auto-login after confirm)
+        
         setMsg("Email confirmed. Redirecting to login…");
         setTimeout(() => nav("/login", { replace: true }), 400);
       } catch (err: any) {

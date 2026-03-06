@@ -22,7 +22,6 @@ export default function Forgot() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        // Supabase will send the user here to set a new password
         redirectTo: `${window.location.origin}/reset`,
       });
       if (error) {
@@ -47,7 +46,7 @@ export default function Forgot() {
           <input
             type="email"
             placeholder="Email"
-            className="w-full rounded-xl border border-gray-300 p-3 text-sm"
+            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

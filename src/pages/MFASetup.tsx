@@ -13,13 +13,9 @@ export default function MFASetup() {
   async function startEnroll() {
     try {
       setStatus('enrolling'); setError('')
-      // Begin TOTP enrollment
       const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
       if (error) throw error
 
-      // Supabase returns a QR code SVG + factor id for verification
-      // data.totp.qr_code is an SVG string; data.id is the factor id
-      // (If your version returns 'qr' or 'uri' instead, log data to inspect.)
       setFactorId((data as any).id)
       setQrSvg((data as any).totp?.qr_code || (data as any).qr_code || '')
       setStatus('idle')
@@ -39,7 +35,6 @@ export default function MFASetup() {
       })
       if (error) throw error
       setStatus('done')
-      // Back to dashboard after activation
       setTimeout(() => navigate('/dashboard', { replace: true }), 600)
     } catch (e:any) {
       console.error('verify error:', e)

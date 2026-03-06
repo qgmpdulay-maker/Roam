@@ -1,9 +1,3 @@
-/**
- * Generic title-case that:
- * - Capitalizes every word
- * - Leaves all-uppercase acronyms we explicitly "keep" (e.g., UV, SUV)
- * - Trims and collapses extra spaces
- */
 export function titleCase(input?: string | null, keep: string[] = []): string {
   if (!input) return "";
   const raw = String(input).trim().replace(/\s+/g, " ");
@@ -42,6 +36,5 @@ export function formatViolationType(v?: string | null): string {
 }
 
 export function formatZoneName(v?: string | null): string {
-  // Keep common initials; extend as you need.
   return titleCase(v ?? "", ["UV", "SUV", "J.P.", "JP", "F."]);
 }

@@ -27,7 +27,6 @@ type ViolationHistoryRow = {
   license_plate: string | null;
   violator_id?: string | null;
 
-  // ✅ your actual columns (not used in history list, but used in latest-meta fetch)
   violator_image_url?: string | null;
   image_url?: string | null;
 };
@@ -83,7 +82,6 @@ export default function Violators() {
   const [historyLoadingId, setHistoryLoadingId] = useState<string | null>(null);
   const [historyErrorById, setHistoryErrorById] = useState<Record<string, string>>({});
 
-  // ✅ Lightbox state
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const VIOLATORS_TABLE = "violators";
@@ -112,13 +110,11 @@ export default function Violators() {
 
         const plates = list.map((r) => norm(r.license_plate)).filter(Boolean);
 
-        // vehicle types
         if (!cancelled) {
           const mapping = await fetchVehicleTypesForPlates(plates);
           if (!cancelled) setPlateToVehicle(mapping);
         }
 
-        // latest thumbs + latest meta (timestamp/street)
         for (const r of list) {
           if (cancelled) break;
           if (!r?.id) continue;
@@ -285,7 +281,7 @@ export default function Violators() {
     return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [rows, plateToVehicle]);
 
-  // ✅ Search now matches: plate, name, latest street, latest violation date
+  // Search including plate, name, latest street, latest violation date
   const filtered = useMemo(() => {
     const query = normLower(q);
 

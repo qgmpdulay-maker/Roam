@@ -15,21 +15,21 @@ export default function Login() {
     setError("");
 
     try {
-      // 1) Password sign-in
       const { error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
+
       if (authError) {
         setError(authError.message || "Invalid email or password.");
         return;
       }
 
-      // 2) Send a 6-digit email OTP (no `type` here)
       const { error: otpErr } = await supabase.auth.signInWithOtp({
         email,
         options: { shouldCreateUser: false },
       });
+
       if (otpErr) {
         setError(otpErr.message || "Failed to send verification code.");
         await supabase.auth.signOut();
@@ -53,25 +53,28 @@ export default function Login() {
         <h1 className="text-3xl font-bold text-orange-600 mb-1 text-center">ROAM</h1>
         <p className="text-center text-gray-600 mb-6">Employee Login</p>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-gray-900 rounded-2xl border border-gray-700 p-5 space-y-3"
+        >
           <input
             type="email"
             placeholder="Email"
-            className="w-full rounded-xl border border-gray-300 p-3 text-sm"
+            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            autoComplete="email"
           />
+
           <input
-            type="password"
-            placeholder="Password"
-            className="w-full rounded-xl border border-gray-300 p-3 text-sm"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
+          type="password"
+          placeholder="Password"
+          className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
           />
+
           <button
             type="submit"
             disabled={loading}
@@ -83,10 +86,19 @@ export default function Login() {
           {error && <p className="text-center text-sm text-red-500">{error}</p>}
 
           <div className="flex items-center justify-between pt-1">
-            <button type="button" onClick={() => nav("/forgot")} className="text-sm text-orange-600 hover:underline">
+            <button
+              type="button"
+              onClick={() => nav("/forgot")}
+              className="text-sm text-orange-600 hover:underline"
+            >
               Forgot password?
             </button>
-            <button type="button" onClick={() => nav("/register")} className="text-sm text-gray-600 hover:underline">
+
+            <button
+              type="button"
+              onClick={() => nav("/register")}
+              className="text-sm text-gray-600 hover:underline"
+            >
               Create account
             </button>
           </div>

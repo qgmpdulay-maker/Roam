@@ -15,8 +15,10 @@ export default function Login() {
     setError("");
 
     try {
+      const trimmedEmail = email.trim();
+
       const { error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: trimmedEmail,
         password,
       });
 
@@ -26,20 +28,30 @@ export default function Login() {
       }
 
       const { error: otpErr } = await supabase.auth.signInWithOtp({
-        email,
+        email: trimmedEmail,
         options: { shouldCreateUser: false },
       });
 
       if (otpErr) {
-        setError(otpErr.message || "Failed to send verification code.");
+        const msg = otpErr.message?.toLowerCase() || "";
+
+        if (msg.includes("rate limit")) {
+          setError(
+            "Too many verification emails were requested. Please wait a few minutes before trying again."
+          );
+        } else {
+          setError(otpErr.message || "Failed to send verification code.");
+        }
+
         await supabase.auth.signOut();
         return;
       }
 
       localStorage.setItem("roam_otp_required", "1");
-      localStorage.setItem("roam_pending_email", email);
-      nav("/verify", { replace: true });
-    } catch (err: any) {
+      localStorage.setItem("roam_pending_email", trimmedEmail);
+
+      nav("/verify-login", { replace: true });
+    } catch (err) {
       console.error(err);
       setError("Unexpected error occurred.");
     } finally {
@@ -64,15 +76,17 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoComplete="email"
           />
 
           <input
-          type="password"
-          placeholder="Password"
-          className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
+            type="password"
+            placeholder="Password"
+            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoComplete="current-password"
           />
 
           <button

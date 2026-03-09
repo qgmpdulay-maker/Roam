@@ -33,7 +33,7 @@ export default function Register() {
       }
 
       setMsg("Verification code sent. Check your email.");
-      nav(`/verify?email=${encodeURIComponent(eTrim)}`);
+      nav(`/verify-register?email=${encodeURIComponent(eTrim)}`);
     } finally {
       setLoading(false);
     }

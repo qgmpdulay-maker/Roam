@@ -75,7 +75,7 @@ export default function Violators() {
   const [latestMetaByViolator, setLatestMetaByViolator] = useState<Record<string, LatestViolationMeta>>({});
 
   const [q, setQ] = useState("");
-  const [vehicleFilter, setVehicleFilter] = useState<string>("all");
+  const [streetFilter, setStreetFilter] = useState<string>("all");
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [historyByViolator, setHistoryByViolator] = useState<Record<string, ViolationHistoryRow[]>>({});
@@ -271,17 +271,15 @@ export default function Violators() {
     }
   }
 
-  const vehicleOptions = useMemo(() => {
+  const streetOptions = useMemo(() => {
     const set = new Set<string>();
     for (const r of rows) {
-      const plate = norm(r.license_plate);
-      const vt = norm(plateToVehicle[plate]);
-      if (vt) set.add(vt);
+      const street = norm(latestMetaByViolator[r.id]?.street_name);
+      if (street) set.add(street);
     }
     return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [rows, plateToVehicle]);
+  }, [rows, latestMetaByViolator]);
 
-  // Search including plate, name, latest street, latest violation date
   const filtered = useMemo(() => {
     const query = normLower(q);
 
@@ -289,13 +287,13 @@ export default function Violators() {
       const plate = normLower(r.license_plate);
       const name = normLower(r.full_name);
 
-      const vt = normLower(plateToVehicle[norm(r.license_plate)]);
-      const matchVehicle = vehicleFilter === "all" || normLower(vehicleFilter) === vt;
-
-      if (!query) return matchVehicle;
-
       const meta = latestMetaByViolator[r.id];
       const street = normLower(meta?.street_name);
+
+      const matchStreet =
+        streetFilter === "all" || normLower(streetFilter) === street;
+
+      if (!query) return matchStreet;
 
       const iso = norm(meta?.timestamp);
       const yyyyMmDd = iso ? iso.slice(0, 10) : "";
@@ -309,13 +307,12 @@ export default function Violators() {
         normLower(yyyyMmDd).includes(query) ||
         normLower(pretty).includes(query);
 
-      return matchVehicle && matchQuery;
+      return matchStreet && matchQuery;
     });
-  }, [rows, q, vehicleFilter, plateToVehicle, latestMetaByViolator]);
+  }, [rows, q, streetFilter, latestMetaByViolator]);
 
   return (
     <div className="page space-y-4">
-      {/* Lightbox modal */}
       {lightboxUrl && (
         <div
           className="fixed inset-0 z-[999] bg-black/70 p-4 flex items-center justify-center"
@@ -355,7 +352,6 @@ export default function Violators() {
         </div>
       </div>
 
-      {/* Search + filter */}
       <div className="card p-4 space-y-3">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:items-end">
           <div className="md:col-span-2">
@@ -369,13 +365,13 @@ export default function Violators() {
           </div>
 
           <div>
-            <label className="roam-label">Vehicle type</label>
+            <label className="roam-label">Street</label>
             <select
               className="roam-input mt-1"
-              value={vehicleFilter}
-              onChange={(e) => setVehicleFilter(e.target.value)}
+              value={streetFilter}
+              onChange={(e) => setStreetFilter(e.target.value)}
             >
-              {vehicleOptions.map((opt) => (
+              {streetOptions.map((opt) => (
                 <option key={opt} value={opt}>
                   {opt === "all" ? "All" : opt}
                 </option>
@@ -385,13 +381,12 @@ export default function Violators() {
         </div>
       </div>
 
-      {/* List */}
       <div className="card p-2">
         {loading ? (
           <div className="p-4 text-sm text-muted">Loading violators…</div>
         ) : filtered.length === 0 ? (
           <div className="p-4 text-sm text-muted">
-            No violators found. Try another keyword or vehicle type.
+            No violators found. Try another keyword or street.
           </div>
         ) : (
           <div className="divide-y divide-neutral-200 dark:divide-gray-800">
@@ -415,7 +410,6 @@ export default function Violators() {
               return (
                 <div key={r.id ?? `${plate}-${idx}`} className="p-3">
                   <div className="flex items-start gap-3">
-                    {/* Clickable thumbnail */}
                     <button
                       type="button"
                       className="shrink-0 h-14 w-14 rounded-xl overflow-hidden border border-neutral-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800"
@@ -444,7 +438,11 @@ export default function Violators() {
                             {plate || "— Plate —"}
                           </div>
 
-                          {vehicleType ? <span className="pill">{vehicleType}</span> : <span className="pill">Unknown vehicle</span>}
+                          {vehicleType ? (
+                            <span className="pill">{vehicleType}</span>
+                          ) : (
+                            <span className="pill">Unknown vehicle</span>
+                          )}
                         </div>
 
                         <div className="mt-1 text-sm text-sub truncate">
@@ -455,7 +453,6 @@ export default function Violators() {
                           Added: {prettyDate(created)}
                         </div>
 
-                        {/* Optional: show latest violation meta so users see what matched */}
                         <div className="mt-1 text-[11px] text-muted">
                           Latest violation: {latestWhen}
                           {latestStreet ? <span> • {latestStreet}</span> : null}
@@ -485,7 +482,6 @@ export default function Violators() {
                     </div>
                   </div>
 
-                  {/* Expandable history */}
                   {isOpen && (
                     <div className="mt-3 rounded-xl border border-neutral-200 dark:border-gray-800 bg-white/60 dark:bg-gray-900/30 p-3">
                       <div className="flex items-center justify-between gap-3">

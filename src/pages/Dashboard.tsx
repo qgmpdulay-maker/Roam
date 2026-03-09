@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/store/auth";
 
 /* =============================================================================
-   Streets (Davao)
+   Streets
 ============================================================================= */
 
 function normalize(s?: string) {
@@ -19,34 +19,32 @@ function normalize(s?: string) {
 }
 
 const ZONES = {
-  soliman_crossing: {
-    key: "soliman_crossing",
-    label: "Soliman St & F Bangoy St",
-    coords: [7.0825, 125.6239] as LatLngExpression,
+  bangoy_soliman: {
+    key: "bangoy_soliman",
+    label: "F. Bangoy St. & Soliman St.",
+    coords: [7.080276079684613, 125.62266174237404] as LatLngExpression,
     matchers: [
-      "soliman st & f bangoy st",
-      "soliman f bangoy",
-      "soliman street & f bangoy street",
+      "f bangoy st soliman st",
+      "f bangoy st & soliman st",
+      "bangoy soliman",
       "soliman crossing",
-      "soliman",
+      "intersection",
     ].map(normalize),
   },
   bangoy: {
     key: "bangoy",
-    label: "F. Bangoy St",
-    coords: [7.0858, 125.6281] as LatLngExpression,
+    label: "F. Bangoy St.",
+    coords: [7.080341958130678, 125.62260139267624] as LatLngExpression,
     matchers: [
-      "f. bangoy st",
       "f bangoy st",
+      "f bangoy",
       "bangoy st",
       "bangoy",
-      "f. bangoy",
-      "f bangoy",
     ].map(normalize),
   },
 } as const;
 
-const ZONE_LIST = [ZONES.soliman_crossing, ZONES.bangoy] as const;
+const ZONE_LIST = [ZONES.bangoy_soliman, ZONES.bangoy] as const;
 
 function zoneKeyFromRow(
   streetName?: string | null,
@@ -54,11 +52,18 @@ function zoneKeyFromRow(
 ): keyof typeof ZONES | null {
   const street = normalize(streetName ?? "");
   const zone = normalize(zoneName ?? "");
+
+  if (street.includes("soliman") && street.includes("bangoy")) return "bangoy_soliman";
+  if (zone.includes("soliman") && zone.includes("bangoy")) return "bangoy_soliman";
+  if (street.includes("bangoy")) return "bangoy";
+  if (zone.includes("bangoy")) return "bangoy";
+
   for (const z of ZONE_LIST) {
     for (const m of z.matchers) {
       if (street.includes(m) || zone.includes(m)) return z.key;
     }
   }
+
   return null;
 }
 
@@ -125,6 +130,13 @@ function isTodayISO(iso?: string | null) {
   );
 }
 
+function prettyDate(iso?: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
+
 /* =============================================================================
    Types
 ============================================================================= */
@@ -141,6 +153,14 @@ type Violation = {
   status: string | null;
   created_at: string | null;
   vehicle_id: string | null;
+};
+
+type ZoneSummary = {
+  key: keyof typeof ZONES;
+  label: string;
+  count: number;
+  pending: number;
+  resolved: number;
 };
 
 /* =============================================================================
@@ -173,10 +193,11 @@ export default function Dashboard() {
     else if (error) console.error(error);
   }
 
-  // initial load + realtime
   const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   useEffect(() => {
     fetchViolations();
+
     const ch = supabase
       .channel("realtime-violations")
       .on(
@@ -195,7 +216,14 @@ export default function Dashboard() {
 
             if (idx === -1) next.unshift(row);
             else next[idx] = row;
-            return next;
+
+            return next
+              .sort((a, b) => {
+                const ta = new Date(a.timestamp ?? a.created_at ?? 0).getTime();
+                const tb = new Date(b.timestamp ?? b.created_at ?? 0).getTime();
+                return tb - ta;
+              })
+              .slice(0, 300);
           });
         }
       )
@@ -209,7 +237,7 @@ export default function Dashboard() {
 
   const filtered = useMemo(() => {
     return violations.filter((v) => {
-      const s = statusLabel(v.status).toLowerCase(); // "pending" | "resolved"
+      const s = statusLabel(v.status).toLowerCase();
       const cls = (v.vehicle_class || "").toLowerCase();
       const zkey = zoneKeyFromRow(v.street_name, v.zone_name);
 
@@ -235,10 +263,11 @@ export default function Dashboard() {
       const k = (v.vehicle_class || "unknown").toLowerCase();
       byClassMap.set(k, (byClassMap.get(k) ?? 0) + 1);
     });
+
     const byClass = Array.from(byClassMap.entries())
       .map(([type, count]) => ({ type, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
+      .slice(0, 5);
 
     return {
       today: today.length,
@@ -247,6 +276,39 @@ export default function Dashboard() {
       byClass,
     };
   }, [violations]);
+
+  const zoneSummaries = useMemo<ZoneSummary[]>(() => {
+    const base: Record<string, ZoneSummary> = {
+      bangoy: {
+        key: "bangoy",
+        label: ZONES.bangoy.label,
+        count: 0,
+        pending: 0,
+        resolved: 0,
+      },
+      bangoy_soliman: {
+        key: "bangoy_soliman",
+        label: ZONES.bangoy_soliman.label,
+        count: 0,
+        pending: 0,
+        resolved: 0,
+      },
+    };
+
+    for (const v of filtered) {
+      const k = zoneKeyFromRow(v.street_name, v.zone_name);
+      if (!k) continue;
+      base[k].count += 1;
+      if (statusLabel(v.status) === "Resolved") base[k].resolved += 1;
+      else base[k].pending += 1;
+    }
+
+    return Object.values(base).sort((a, b) => b.count - a.count);
+  }, [filtered]);
+
+  const recentViolations = useMemo(() => {
+    return filtered.slice(0, 5);
+  }, [filtered]);
 
   return (
     <div className="min-h-screen flex flex-col px-4 py-4 gap-4">
@@ -258,94 +320,111 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Map */}
-      <div className="overflow-hidden rounded-xl border border-gray-200">
+      {/* Quick stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
+          <div className="text-xl font-semibold">{stats.today}</div>
+          <div className="text-xs text-gray-500">Violations Today</div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
+          <div className="text-xl font-semibold">{stats.pending}</div>
+          <div className="text-xs text-gray-500">Pending</div>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
+          <div className="text-xl font-semibold">{stats.resolved}</div>
+          <div className="text-xs text-gray-500">Resolved</div>
+        </div>
+      </div>
+
+      {/* Useful summaries */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <div className="text-sm font-semibold mb-3">Top Streets</div>
+          <div className="space-y-2">
+            {zoneSummaries.map((z) => (
+              <div
+                key={z.key}
+                className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium">{z.label}</div>
+                  <div className="text-sm font-semibold">{z.count}</div>
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  Pending {z.pending} • Resolved {z.resolved}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-3">
+          <div className="text-sm font-semibold mb-3">Most Common Vehicle Classes Today</div>
+          {stats.byClass.length === 0 ? (
+            <div className="text-xs text-gray-500">No data for today.</div>
+          ) : (
+            <div className="space-y-2">
+              {stats.byClass.map((item) => (
+                <div key={item.type} className="flex items-center gap-3">
+                  <span
+                    className="h-3 w-3 rounded-full shrink-0"
+                    style={{ backgroundColor: colorForClass(item.type) }}
+                  />
+                  <div className="flex-1 text-sm">{titleCase(item.type)}</div>
+                  <div className="text-sm font-semibold">{item.count}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Smaller, more useful map */}
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+        <div className="px-3 pt-3 pb-2 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-semibold">Street Hotspots</div>
+            <div className="text-xs text-gray-500">
+              Filtered overview of active streets
+            </div>
+          </div>
+          <div className="text-xs text-gray-500">{filtered.length} visible</div>
+        </div>
+
         <MapContainer
           center={mapCenter}
-          zoom={16}
+          zoom={18}
           scrollWheelZoom={false}
-          style={{ height: 300, width: "100%" }}
+          style={{ height: 220, width: "100%" }}
         >
           <TileLayer
-            attribution='&copy; OpenStreetMap contributors'
+            attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* fixed street pins */}
-          {ZONE_LIST.map((z) => (
-            <CircleMarker
-              key={z.key}
-              center={z.coords}
-              radius={8}
-              color="#111827"
-              fillColor="#ffffff"
-              fillOpacity={1}
-            >
-              <Popup>
-                <div className="text-sm">{z.label}</div>
-              </Popup>
-            </CircleMarker>
-          ))}
-
-          {/* violations pins */}
-          {filtered.map((v) => {
-            const k = zoneKeyFromRow(v.street_name, v.zone_name);
-            if (!k) return null;
-            const zone = ZONES[k];
-            const col = colorForClass(v.vehicle_class ?? undefined);
+          {zoneSummaries.map((z) => {
+            const zone = ZONES[z.key];
+            const radius = z.count > 0 ? Math.min(28, 10 + z.count * 1.5) : 8;
 
             return (
               <CircleMarker
-                key={v.id}
+                key={z.key}
                 center={zone.coords}
-                radius={7}
+                radius={radius}
                 color="#111827"
                 weight={1}
-                fillColor={col}
-                fillOpacity={0.85}
+                fillColor={z.count > 0 ? "#F97316" : "#D1D5DB"}
+                fillOpacity={z.count > 0 ? 0.65 : 0.5}
               >
                 <Popup>
                   <div className="text-sm">
-                    <div className="font-medium">
-                      {titleCase(v.vehicle_class) || "Vehicle"}
+                    <div className="font-medium">{zone.label}</div>
+                    <div className="text-xs text-gray-600">
+                      Total: {z.count}
                     </div>
                     <div className="text-xs text-gray-600">
-                      {v.violation_type || "Violation"}
+                      Pending: {z.pending} • Resolved: {z.resolved}
                     </div>
-                    <div className="text-xs text-gray-600">
-                      {v.street_name || zone.label}
-                    </div>
-                    <div className="mt-1 text-xs">
-                      Status:{" "}
-                      <span
-                        className={
-                          statusLabel(v.status) === "Resolved"
-                            ? "text-green-600"
-                            : "text-orange-600"
-                        }
-                      >
-                        {statusLabel(v.status)}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-gray-500">
-                      {new Date(
-                        v.timestamp ?? v.created_at ?? Date.now()
-                      ).toLocaleString()}
-                    </div>
-                    {v.image_url && (
-                      <img
-                        src={v.image_url}
-                        alt="evidence"
-                        className="mt-2 h-20 w-full rounded object-cover"
-                      />
-                    )}
-                    {/* NEW: quick jump to details */}
-                    <Link
-                      to={`/violation/${v.id}`}
-                      className="mt-2 inline-flex items-center rounded-lg border border-orange-300 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-50"
-                    >
-                      View details →
-                    </Link>
                   </div>
                 </Popup>
               </CircleMarker>
@@ -354,7 +433,7 @@ export default function Dashboard() {
         </MapContainer>
       </div>
 
-      {/* Filters */}
+ {/* Filters */}
       <div className="grid grid-cols-3 gap-2">
         <select
           className="rounded-xl border border-gray-300 bg-white p-2 text-sm"
@@ -374,7 +453,7 @@ export default function Dashboard() {
           <option value="all">All Classes</option>
           {VEHICLE_ORDER.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {titleCase(c)}
             </option>
           ))}
         </select>
@@ -382,31 +461,62 @@ export default function Dashboard() {
         <select
           className="rounded-xl border border-gray-300 bg-white p-2 text-sm"
           value={zoneFilter}
-          onChange={(e) => setZoneFilter(e.target.value as any)}
+          onChange={(e) => setZoneFilter(e.target.value)}
         >
           <option value="all">All Streets</option>
-          <option value="soliman_crossing">{ZONES.soliman_crossing.label}</option>
           <option value="bangoy">{ZONES.bangoy.label}</option>
+          <option value="bangoy_soliman">{ZONES.bangoy_soliman.label}</option>
         </select>
       </div>
 
-      {/* Quick stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
-          <div className="text-xl font-semibold">{stats.today}</div>
-          <div className="text-xs text-gray-500">Violations Today</div>
+      {/* Recent violations summary */}
+      <div className="rounded-xl border border-gray-200 bg-white p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-semibold">Recent Violations</div>
+          <div className="text-xs text-gray-500">Latest 5 matching filters</div>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
-          <div className="text-xl font-semibold">{stats.pending}</div>
-          <div className="text-xs text-gray-500">Pending</div>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
-          <div className="text-xl font-semibold">{stats.resolved}</div>
-          <div className="text-xs text-gray-500">Resolved</div>
+
+        <div className="space-y-2">
+          {recentViolations.length === 0 ? (
+            <div className="text-xs text-gray-500">No recent violations.</div>
+          ) : (
+            recentViolations.map((v) => {
+              const zoneKey = zoneKeyFromRow(v.street_name, v.zone_name) ?? "bangoy";
+              const streetLabel = v.street_name || ZONES[zoneKey].label;
+
+              return (
+                <Link
+                  key={v.id}
+                  to={`/violation/${v.id}`}
+                  className="block rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 hover:bg-gray-100"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {titleCase(v.vehicle_class) || "Vehicle"}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {v.violation_type || "Violation"} • {streetLabel}
+                      </div>
+                    </div>
+                    <div
+                      className={`text-xs font-medium ${
+                        statusLabel(v.status) === "Resolved"
+                          ? "text-green-600"
+                          : "text-orange-600"
+                      }`}
+                    >
+                      {statusLabel(v.status)}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })
+          )}
         </div>
       </div>
 
-      {/* Violations feed (now interactive) */}
+      {/* Violations feed */}
       <div className="rounded-xl border border-gray-200 bg-white p-3 flex-1">
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-semibold">Violations Feed</div>
@@ -421,7 +531,6 @@ export default function Dashboard() {
 
               return (
                 <li key={v.id} className="py-0">
-                  {/* Make the entire row a link */}
                   <Link
                     to={`/violation/${v.id}`}
                     className="block py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/70 rounded-lg -mx-2 px-2 hover:bg-gray-50"
@@ -460,16 +569,13 @@ export default function Dashboard() {
                         </div>
 
                         <div className="text-[11px] text-gray-400">
-                          {new Date(
-                            v.timestamp ?? v.created_at ?? Date.now()
-                          ).toLocaleString()}
+                          {prettyDate(v.timestamp ?? v.created_at)}
                           {typeof v.duration_seconds === "number" && (
                             <> • {v.duration_seconds}s</>
                           )}
                         </div>
                       </div>
 
-                      {/* Chevron */}
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         className="h-4 w-4 text-gray-300"

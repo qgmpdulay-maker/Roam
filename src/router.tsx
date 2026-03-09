@@ -12,6 +12,7 @@ import Login from "@/pages/Login";
 import Forgot from "@/pages/Forgot";
 import Register from "@/pages/Register";
 import Verify from "@/pages/Verify";
+import LoginVerify from "@/pages/LoginVerify";
 import SetPassword from "@/pages/SetPassword";
 import AuthCallback from "@/pages/AuthCallback";
 import Reset from "@/pages/Reset";
@@ -39,7 +40,8 @@ export const router = createBrowserRouter(
       <Route path="/" element={<Splash />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/verify" element={<Verify />} />
+      <Route path="/verify-register" element={<Verify />} />
+      <Route path="/verify-login" element={<LoginVerify />} />
       <Route path="/set-password" element={<SetPassword />} />
       <Route path="/forgot" element={<Forgot />} />
       <Route path="/reset" element={<Reset />} />
@@ -62,7 +64,6 @@ export const router = createBrowserRouter(
         <Route path="/settings" element={<Settings />} />
       </Route>
 
-      {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </>
   )

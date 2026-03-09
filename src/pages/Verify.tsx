@@ -99,7 +99,7 @@ export default function Verify() {
           {/* show email so they know where the code was sent */}
           <input
             type="email"
-            className="w-full rounded-xl border border-gray-300 p-3 text-sm bg-gray-50"
+            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
             value={email}
             readOnly
           />
@@ -107,7 +107,7 @@ export default function Verify() {
           <input
             inputMode="numeric"
             placeholder="6-digit code"
-            className="w-full rounded-xl border border-gray-300 p-3 text-sm tracking-widest text-center"
+            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
             maxLength={6}

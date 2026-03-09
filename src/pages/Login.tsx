@@ -9,16 +9,32 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const darkInputClass =
+    "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    try {
-      const trimmedEmail = email.trim();
+    const cleanEmail = email.trim();
 
+    if (!cleanEmail) {
+      setError("Please enter your email.");
+      setLoading(false);
+      return;
+    }
+
+    if (!password) {
+      setError("Please enter your password.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Step 1: password login
       const { error: authError } = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
+        email: cleanEmail,
         password,
       });
 
@@ -27,30 +43,24 @@ export default function Login() {
         return;
       }
 
+      // Step 2: send login verification code
       const { error: otpErr } = await supabase.auth.signInWithOtp({
-        email: trimmedEmail,
+        email: cleanEmail,
         options: { shouldCreateUser: false },
       });
 
       if (otpErr) {
-        const msg = otpErr.message?.toLowerCase() || "";
-
-        if (msg.includes("rate limit")) {
-          setError(
-            "Too many verification emails were requested. Please wait a few minutes before trying again."
-          );
-        } else {
-          setError(otpErr.message || "Failed to send verification code.");
-        }
-
+        setError(otpErr.message || "Failed to send verification code.");
         await supabase.auth.signOut();
         return;
       }
 
+      // Mark login as pending second verification
       localStorage.setItem("roam_otp_required", "1");
-      localStorage.setItem("roam_pending_email", trimmedEmail);
+      localStorage.setItem("roam_otp_verified", "0");
+      localStorage.setItem("roam_pending_email", cleanEmail);
 
-      nav("/verify-login", { replace: true });
+      nav("/login-verify", { replace: true });
     } catch (err) {
       console.error(err);
       setError("Unexpected error occurred.");
@@ -60,19 +70,20 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-white px-4">
+    <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-orange-600 mb-1 text-center">ROAM</h1>
-        <p className="text-center text-gray-600 mb-6">Employee Login</p>
+        <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
+        <p className="text-center text-gray-400 mb-8">Employee Login</p>
 
         <form
           onSubmit={handleSubmit}
-          className="bg-gray-900 rounded-2xl border border-gray-700 p-5 space-y-3"
+          className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm"
         >
           <input
             type="email"
             placeholder="Email"
-            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
+            className={darkInputClass}
+            style={{ WebkitTextFillColor: "#ffffff" }}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -82,7 +93,8 @@ export default function Login() {
           <input
             type="password"
             placeholder="Password"
-            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
+            className={darkInputClass}
+            style={{ WebkitTextFillColor: "#ffffff" }}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -92,18 +104,18 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl bg-orange-600 py-2.5 text-white font-semibold active:bg-orange-700 disabled:opacity-50"
+            className="w-full rounded-2xl bg-orange-600 py-3 text-white text-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
           >
             {loading ? "Signing in…" : "Login"}
           </button>
 
-          {error && <p className="text-center text-sm text-red-500">{error}</p>}
+          {error && <p className="text-center text-sm text-red-400">{error}</p>}
 
           <div className="flex items-center justify-between pt-1">
             <button
               type="button"
               onClick={() => nav("/forgot")}
-              className="text-sm text-orange-600 hover:underline"
+              className="text-sm text-orange-500 hover:underline"
             >
               Forgot password?
             </button>
@@ -111,7 +123,7 @@ export default function Login() {
             <button
               type="button"
               onClick={() => nav("/register")}
-              className="text-sm text-gray-600 hover:underline"
+              className="text-sm text-gray-400 hover:underline"
             >
               Create account
             </button>

@@ -8,6 +8,8 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  const darkInputClass =
+  "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
 
   async function sendCode(e: React.FormEvent) {
     e.preventDefault();
@@ -49,20 +51,21 @@ export default function Register() {
           onSubmit={sendCode}
           className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3"
         >
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
+        <input
+          type="email"
+          placeholder="Email"
+          className={darkInputClass}
+          style={{ WebkitTextFillColor: "#ffffff" }}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+        />
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl bg-orange-600 py-2.5 text-white font-semibold active:bg-orange-700 disabled:opacity-50"
+            className="w-full rounded-2xl bg-orange-600 py-3 text-white text-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
           >
             {loading ? "Sending…" : "Send verification code"}
           </button>

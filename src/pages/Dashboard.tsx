@@ -130,13 +130,6 @@ function isTodayISO(iso?: string | null) {
   );
 }
 
-function prettyDate(iso?: string | null) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleString();
-}
-
 /* =============================================================================
    Types
 ============================================================================= */
@@ -311,46 +304,46 @@ export default function Dashboard() {
   }, [filtered]);
 
   return (
-    <div className="min-h-screen flex flex-col px-4 py-4 gap-4">
+    <div className="min-h-screen flex flex-col px-4 py-4 gap-4 text-gray-900 dark:text-gray-100">
       {/* Header */}
       <div>
-        <h1 className="text-lg font-semibold">Dashboard</h1>
-        <p className="text-xs text-gray-500">
-          Signed in as <span className="font-medium">{user?.email ?? "—"}</span>
+        <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Dashboard</h1>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Signed in as <span className="font-medium text-gray-700 dark:text-gray-200">{user?.email ?? "—"}</span>
         </p>
       </div>
 
       {/* Quick stats */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
-          <div className="text-xl font-semibold">{stats.today}</div>
-          <div className="text-xs text-gray-500">Violations Today</div>
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 text-center">
+          <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{stats.today}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Violations Today</div>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
-          <div className="text-xl font-semibold">{stats.pending}</div>
-          <div className="text-xs text-gray-500">Pending</div>
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 text-center">
+          <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{stats.pending}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Pending</div>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
-          <div className="text-xl font-semibold">{stats.resolved}</div>
-          <div className="text-xs text-gray-500">Resolved</div>
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 text-center">
+          <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{stats.resolved}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Resolved</div>
         </div>
       </div>
 
       {/* Useful summaries */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <div className="text-sm font-semibold mb-3">Top Streets</div>
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
+          <div className="text-sm font-semibold mb-3 text-gray-900 dark:text-gray-100">Top Streets</div>
           <div className="space-y-2">
             {zoneSummaries.map((z) => (
               <div
                 key={z.key}
-                className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 px-3 py-2"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium">{z.label}</div>
-                  <div className="text-sm font-semibold">{z.count}</div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{z.label}</div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{z.count}</div>
                 </div>
-                <div className="mt-1 text-xs text-gray-500">
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Pending {z.pending} • Resolved {z.resolved}
                 </div>
               </div>
@@ -358,10 +351,12 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <div className="text-sm font-semibold mb-3">Most Common Vehicle Classes Today</div>
+        <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
+          <div className="text-sm font-semibold mb-3 text-gray-900 dark:text-gray-100">
+            Most Common Vehicle Classes Today
+          </div>
           {stats.byClass.length === 0 ? (
-            <div className="text-xs text-gray-500">No data for today.</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">No data for today.</div>
           ) : (
             <div className="space-y-2">
               {stats.byClass.map((item) => (
@@ -370,8 +365,8 @@ export default function Dashboard() {
                     className="h-3 w-3 rounded-full shrink-0"
                     style={{ backgroundColor: colorForClass(item.type) }}
                   />
-                  <div className="flex-1 text-sm">{titleCase(item.type)}</div>
-                  <div className="text-sm font-semibold">{item.count}</div>
+                  <div className="flex-1 text-sm text-gray-900 dark:text-gray-100">{titleCase(item.type)}</div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.count}</div>
                 </div>
               ))}
             </div>
@@ -380,15 +375,15 @@ export default function Dashboard() {
       </div>
 
       {/* Smaller, more useful map */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
         <div className="px-3 pt-3 pb-2 flex items-center justify-between">
           <div>
-            <div className="text-sm font-semibold">Street Hotspots</div>
-            <div className="text-xs text-gray-500">
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Street Hotspots</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
               Filtered overview of active streets
             </div>
           </div>
-          <div className="text-xs text-gray-500">{filtered.length} visible</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">{filtered.length} visible</div>
         </div>
 
         <MapContainer
@@ -417,11 +412,9 @@ export default function Dashboard() {
                 fillOpacity={z.count > 0 ? 0.65 : 0.5}
               >
                 <Popup>
-                  <div className="text-sm">
+                  <div className="text-sm text-gray-900">
                     <div className="font-medium">{zone.label}</div>
-                    <div className="text-xs text-gray-600">
-                      Total: {z.count}
-                    </div>
+                    <div className="text-xs text-gray-600">Total: {z.count}</div>
                     <div className="text-xs text-gray-600">
                       Pending: {z.pending} • Resolved: {z.resolved}
                     </div>
@@ -436,7 +429,7 @@ export default function Dashboard() {
       {/* Filters */}
       <div className="grid grid-cols-3 gap-2">
         <select
-          className="rounded-xl border border-gray-300 bg-white p-2 text-sm"
+          className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 text-sm text-gray-900 dark:text-gray-100"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
         >
@@ -446,7 +439,7 @@ export default function Dashboard() {
         </select>
 
         <select
-          className="rounded-xl border border-gray-300 bg-white p-2 text-sm capitalize"
+          className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 text-sm text-gray-900 dark:text-gray-100 capitalize"
           value={classFilter}
           onChange={(e) => setClassFilter(e.target.value)}
         >
@@ -459,7 +452,7 @@ export default function Dashboard() {
         </select>
 
         <select
-          className="rounded-xl border border-gray-300 bg-white p-2 text-sm"
+          className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 text-sm text-gray-900 dark:text-gray-100"
           value={zoneFilter}
           onChange={(e) => setZoneFilter(e.target.value)}
         >
@@ -470,15 +463,15 @@ export default function Dashboard() {
       </div>
 
       {/* Recent violations summary */}
-      <div className="rounded-xl border border-gray-200 bg-white p-3">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-sm font-semibold">Recent Violations</div>
-          <div className="text-xs text-gray-500">Most recent filtered results</div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent Violations</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">Most recent filtered results</div>
         </div>
 
         <div className="space-y-2">
           {recentViolations.length === 0 ? (
-            <div className="text-xs text-gray-500">No recent violations.</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">No recent violations.</div>
           ) : (
             recentViolations.map((v) => {
               const zoneKey = zoneKeyFromRow(v.street_name, v.zone_name) ?? "bangoy";
@@ -488,14 +481,14 @@ export default function Dashboard() {
                 <Link
                   key={v.id}
                   to={`/violation/${v.id}`}
-                  className="block rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 hover:bg-gray-100"
+                  className="block rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">
+                      <div className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">
                         {titleCase(v.vehicle_class) || "Vehicle"}
                       </div>
-                      <div className="text-xs text-gray-500 truncate">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                         {v.violation_type || "Violation"} • {streetLabel}
                       </div>
                     </div>

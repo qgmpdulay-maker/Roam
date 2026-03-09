@@ -15,7 +15,6 @@ type Violation = {
   violator_name: string | null;
   violator_id: string | null;
 
-  // ✅ new (add this column in DB)
   violator_image_url?: string | null;
 
   resolved_by?: string | null;
@@ -51,11 +50,14 @@ function safeFilename(name: string) {
   return String(name ?? "").replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+const inputClass =
+  "w-full rounded-xl border p-3 text-sm bg-white text-gray-900 border-gray-300 placeholder-gray-400 dark:bg-gray-800 dark:text-white dark:border-gray-700 dark:placeholder-gray-400 outline-none";
+const labelClass = "block text-xs text-gray-500 dark:text-gray-400 mb-1";
+
 export default function ViolationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // ✅ Change this if your violations list route is different
   const VIOLATIONS_LIST_ROUTE = "/violations";
 
   const [loading, setLoading] = useState(true);
@@ -74,7 +76,6 @@ export default function ViolationDetail() {
   const [hasLicense, setHasLicense] = useState(false);
   const [note, setNote] = useState("");
 
-  // =================== VIOLATOR PHOTO ONLY ===================
   const EVIDENCE_BUCKET = "violation_evidence";
 
   const [violatorFile, setViolatorFile] = useState<File | null>(null);
@@ -134,7 +135,6 @@ export default function ViolationDetail() {
     }
   }
 
-  // =================== LOAD ===================
   useEffect(() => {
     let live = true;
 
@@ -164,7 +164,6 @@ export default function ViolationDetail() {
 
       setViolatorImgUrl(v.violator_image_url ?? "");
 
-      // If linked violator exists, load extra details
       if (v.violator_id) {
         const { data: violator, error: violatorErr } = await supabase
           .from("violators")
@@ -260,7 +259,6 @@ export default function ViolationDetail() {
         return;
       }
 
-      // ✅ If officer selected a violator photo but didn’t press Upload, upload here
       let nextViolatorImgUrl = violatorImgUrl || null;
       if (violatorFile) {
         setUploading(true);
@@ -272,7 +270,6 @@ export default function ViolationDetail() {
 
       let violatorId = row.violator_id ?? null;
 
-      // CREATE/UPDATE violator record (your existing logic)
       if (violatorId) {
         const { error: updateErr } = await supabase
           .from("violators")
@@ -359,7 +356,6 @@ export default function ViolationDetail() {
         }
       }
 
-      // UPDATE violation record (+ violator photo)
       const { data: violationData, error: violationErr } = await supabase
         .from("violations")
         .update({
@@ -381,7 +377,6 @@ export default function ViolationDetail() {
         return;
       }
 
-      // local sync (optional)
       const updated = violationData as Violation;
       setRow(updated);
       setPlate(nextPlate);
@@ -389,7 +384,6 @@ export default function ViolationDetail() {
       setViolatorImgUrl(updated.violator_image_url ?? (nextViolatorImgUrl ?? ""));
       setViolatorFile(null);
 
-      // ✅ GO BACK TO LIST
       navigate(VIOLATIONS_LIST_ROUTE, {
         replace: true,
         state: { justResolvedId: row.id },
@@ -403,45 +397,42 @@ export default function ViolationDetail() {
     }
   }
 
-  // ---------- rendering ----------
   if (loading)
     return (
-      <div className="min-h-screen px-4 py-4">
+      <div className="min-h-screen px-4 py-4 text-gray-900 dark:text-gray-100">
         <button
           onClick={() => navigate(-1)}
-          className="rounded-full px-4 py-2 border border-gray-300 text-sm"
+          className="rounded-full px-4 py-2 border border-gray-300 dark:border-gray-700 text-sm bg-white dark:bg-gray-900 dark:text-white"
         >
           Back
         </button>
-        <div className="mt-6 text-sm text-gray-500">Loading violation…</div>
+        <div className="mt-6 text-sm text-gray-500 dark:text-gray-400">Loading violation…</div>
       </div>
     );
 
   if (!row)
     return (
-      <div className="min-h-screen px-4 py-4">
+      <div className="min-h-screen px-4 py-4 text-gray-900 dark:text-gray-100">
         <button
           onClick={() => navigate(-1)}
-          className="rounded-full px-4 py-2 border border-gray-300 text-sm"
+          className="rounded-full px-4 py-2 border border-gray-300 dark:border-gray-700 text-sm bg-white dark:bg-gray-900 dark:text-white"
         >
           Back
         </button>
-        <div className="mt-6 text-sm text-red-600">
-          {error ?? "Violation not found."}
-        </div>
+        <div className="mt-6 text-sm text-red-600">{error ?? "Violation not found."}</div>
       </div>
     );
 
   return (
-    <div className="min-h-screen px-4 py-4">
+    <div className="min-h-screen px-4 py-4 text-gray-900 dark:text-gray-100">
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigate(-1)}
-          className="rounded-full px-4 py-2 border border-gray-300 text-sm bg-white"
+          className="rounded-full px-4 py-2 border border-gray-300 dark:border-gray-700 text-sm bg-white dark:bg-gray-900 dark:text-white"
         >
           Back
         </button>
-        <h1 className="text-lg font-semibold">Violation</h1>
+        <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Violation</h1>
         <div className="w-[64px]" />
       </div>
 
@@ -453,13 +444,13 @@ export default function ViolationDetail() {
             className="w-full h-52 object-cover"
           />
         ) : (
-          <div className="w-full h-52 grid place-items-center bg-gray-100 text-gray-500 text-sm">
+          <div className="w-full h-52 grid place-items-center bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-sm">
             No Image
           </div>
         )}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+      <div className="mt-4 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4">
         <FieldRow label="Violation Type" value={cap(row.violation_type)} />
         <FieldRow label="Street" value={row.street_name ?? "—"} />
         <FieldRow label="Vehicle Type" value={cap(row.vehicle_class)} />
@@ -474,14 +465,13 @@ export default function ViolationDetail() {
           }
         />
 
-        {/* ✅ Violator Photo ONLY */}
-        <div className="mt-4 rounded-2xl border border-gray-200 p-3">
+        <div className="mt-4 rounded-2xl border border-gray-200 dark:border-gray-800 p-3">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <div className="text-sm font-semibold text-gray-900">
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 Violator photo
               </div>
-              <div className="text-xs text-gray-500">Capture the violator</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Capture the violator</div>
             </div>
             {violatorImgUrl ? (
               <a
@@ -493,7 +483,7 @@ export default function ViolationDetail() {
                 View
               </a>
             ) : (
-              <span className="text-xs text-gray-400">No upload</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">No upload</span>
             )}
           </div>
 
@@ -501,10 +491,10 @@ export default function ViolationDetail() {
             {violatorPreview || violatorImgUrl ? (
               <img
                 src={violatorPreview || violatorImgUrl}
-                className="h-40 w-full rounded-xl object-cover bg-gray-50"
+                className="h-40 w-full rounded-xl object-cover bg-gray-50 dark:bg-gray-800"
               />
             ) : (
-              <div className="h-40 w-full rounded-xl bg-gray-50 grid place-items-center text-xs text-gray-400">
+              <div className="h-40 w-full rounded-xl bg-gray-50 dark:bg-gray-800 grid place-items-center text-xs text-gray-400 dark:text-gray-500">
                 No violator photo selected
               </div>
             )}
@@ -521,7 +511,7 @@ export default function ViolationDetail() {
             />
             <label
               htmlFor="violator-photo"
-              className="flex-1 text-center rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold bg-white hover:bg-gray-50"
+              className="flex-1 text-center rounded-xl border border-gray-300 dark:border-gray-700 px-3 py-2 text-xs font-semibold bg-white dark:bg-gray-900 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Take photo
             </label>
@@ -529,7 +519,7 @@ export default function ViolationDetail() {
             <button
               type="button"
               onClick={() => setViolatorFile(null)}
-              className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold bg-white hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-xl border border-gray-300 dark:border-gray-700 px-3 py-2 text-xs font-semibold bg-white dark:bg-gray-900 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
               disabled={!violatorFile}
             >
               Clear
@@ -546,31 +536,30 @@ export default function ViolationDetail() {
           </div>
         </div>
 
-        {/* Inputs */}
         <div className="mt-4">
-          <label className="block text-xs text-gray-500 mb-1">
-            Violator Name
-          </label>
+          <label className={labelClass}>Violator Name</label>
           <input
             value={violatorName}
             onChange={(e) => setViolatorName(e.target.value)}
             placeholder="e.g., Juan Dela Cruz"
-            className="w-full rounded-xl border border-gray-300 p-3 text-sm"
+            className={inputClass}
+            style={{ WebkitTextFillColor: "currentColor" }}
             maxLength={80}
           />
         </div>
 
         <div className="mt-4">
-          <label className="block text-xs text-gray-500 mb-1">
-            License Plate
-          </label>
+          <label className={labelClass}>License Plate</label>
           <input
             value={plate}
             onChange={onPlateChange}
             placeholder="ABC 1234"
-            className={`w-full rounded-xl border p-3 text-sm uppercase ${
-              plate && plateError ? "border-red-400" : "border-gray-300"
+            className={`${inputClass} uppercase ${
+              plate && plateError
+                ? "border-red-400 dark:border-red-500"
+                : "border-gray-300 dark:border-gray-700"
             }`}
+            style={{ WebkitTextFillColor: "currentColor" }}
             maxLength={8}
             inputMode="text"
           />
@@ -580,26 +569,28 @@ export default function ViolationDetail() {
         </div>
 
         <div className="mt-4">
-          <label className="block text-xs text-gray-500 mb-1">Address</label>
+          <label className={labelClass}>Address</label>
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            className="w-full rounded-xl border border-gray-300 p-3 text-sm"
+            className={inputClass}
+            style={{ WebkitTextFillColor: "currentColor" }}
             maxLength={200}
           />
         </div>
 
         <div className="mt-4">
-          <label className="block text-xs text-gray-500 mb-1">
-            Contact Number
-          </label>
+          <label className={labelClass}>Contact Number</label>
           <input
             value={contactNo}
             onChange={(e) => setContactNo(e.target.value.replace(/[^0-9]/g, ""))}
             placeholder="09171234567"
-            className={`w-full rounded-xl border p-3 text-sm ${
-              contactNo && contactError ? "border-red-400" : "border-gray-300"
+            className={`${inputClass} ${
+              contactNo && contactError
+                ? "border-red-400 dark:border-red-500"
+                : "border-gray-300 dark:border-gray-700"
             }`}
+            style={{ WebkitTextFillColor: "currentColor" }}
             maxLength={11}
             inputMode="numeric"
           />
@@ -609,28 +600,27 @@ export default function ViolationDetail() {
         </div>
 
         <div className="mt-4">
-          <label className="block text-xs text-gray-500 mb-1">Notes</label>
+          <label className={labelClass}>Notes</label>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 500))}
-            className="w-full rounded-xl border border-gray-300 p-3 text-sm resize-none"
+            className="w-full rounded-xl border border-gray-300 dark:border-gray-700 p-3 text-sm resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 outline-none"
+            style={{ WebkitTextFillColor: "currentColor" }}
             rows={4}
             maxLength={500}
           />
-          <div className="text-right text-[11px] text-gray-400 mt-1">
+          <div className="text-right text-[11px] text-gray-400 dark:text-gray-500 mt-1">
             {note.length}/500
           </div>
         </div>
 
         <div className="mt-4">
-          <span className="block text-xs text-gray-500 mb-1">
-            Documents Presented
-          </span>
-          <div className="flex items-center gap-4 text-xs">
+          <span className={labelClass}>Documents Presented</span>
+          <div className="flex items-center gap-4 text-xs text-gray-700 dark:text-gray-300">
             <label className="inline-flex items-center gap-2">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-gray-300"
+                className="h-4 w-4 rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
                 checked={hasOrCr}
                 onChange={(e) => setHasOrCr(e.target.checked)}
               />
@@ -639,7 +629,7 @@ export default function ViolationDetail() {
             <label className="inline-flex items-center gap-2">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-gray-300"
+                className="h-4 w-4 rounded border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"
                 checked={hasLicense}
                 onChange={(e) => setHasLicense(e.target.checked)}
               />
@@ -682,10 +672,10 @@ function FieldRow({
   valueClass?: string;
 }) {
   return (
-    <div className="py-3 border-b last:border-b-0 border-gray-100">
+    <div className="py-3 border-b last:border-b-0 border-gray-100 dark:border-gray-800">
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs text-gray-500">{label}</div>
-        <div className={`text-sm ${valueClass ?? ""}`}>{value}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
+        <div className={`text-sm text-gray-900 dark:text-gray-100 ${valueClass ?? ""}`}>{value}</div>
       </div>
     </div>
   );

@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
+const darkInputClass =
+  "w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-center text-lg tracking-widest text-white placeholder-gray-400 caret-white focus:outline-none focus:ring-2 focus:ring-orange-500";
+
 export default function LoginVerify() {
   const nav = useNavigate();
   const [code, setCode] = useState("");
@@ -112,18 +115,20 @@ export default function LoginVerify() {
           className="bg-gray-900 rounded-2xl border border-gray-700 p-5 space-y-4"
         >
           <p className="text-sm text-gray-300 text-center">
-            Enter the 6-digit code sent to your email to complete login.
+            Enter the 6-digit code sent to <span className="font-medium text-white">{email}</span> to complete login.
           </p>
 
           <input
             type="text"
             inputMode="numeric"
             placeholder="6-digit code"
-            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-center text-lg tracking-widest text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className={darkInputClass}
+            style={{ WebkitTextFillColor: "#ffffff" }}
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
             maxLength={6}
             required
+            autoComplete="one-time-code"
           />
 
           <button

@@ -8,22 +8,26 @@ export default function Forgot() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const darkInputClass =
+  "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setInfo("");
 
-    if (!email) {
+    if (!email.trim()) {
       setError("Please enter your email.");
       return;
     }
+
     setSending(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/reset`,
       });
+
       if (error) {
         setError(error.message);
       } else {
@@ -39,14 +43,18 @@ export default function Forgot() {
   return (
     <div className="min-h-screen grid place-items-center bg-white px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-orange-600 mb-1 text-center">ROAM</h1>
-        <p className="text-center text-gray-600 mb-6">Reset your password</p>
+        <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
+        <p className="text-center text-gray-600 mb-8">Reset your password</p>
 
-        <form onSubmit={onSubmit} className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+        <form
+          onSubmit={onSubmit}
+          className="bg-white rounded-3xl border border-gray-200 p-6 space-y-4 shadow-sm"
+        >
           <input
             type="email"
             placeholder="Email"
-            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
+            className={darkInputClass}
+            style={{ WebkitTextFillColor: "#ffffff" }}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -56,7 +64,7 @@ export default function Forgot() {
           <button
             type="submit"
             disabled={sending}
-            className="w-full rounded-2xl bg-orange-600 py-2.5 text-white font-semibold active:bg-orange-700 disabled:opacity-50"
+            className="w-full rounded-2xl bg-orange-600 py-3 text-white text-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
           >
             {sending ? "Sending…" : "Send reset link"}
           </button>

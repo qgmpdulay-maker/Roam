@@ -11,6 +11,8 @@ export default function Verify() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  const darkInputClass =
+  "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
 
   useEffect(() => {
     const e = params.get("email");
@@ -29,6 +31,7 @@ export default function Verify() {
       setError("Missing email. Please go back and enter your email again.");
       return;
     }
+
     if (!/^\d{6}$/.test(token)) {
       setError("Enter the 6-digit code from your email.");
       return;
@@ -48,7 +51,6 @@ export default function Verify() {
         return;
       }
 
-      // Confirm session exists before proceeding
       const { data: s } = await supabase.auth.getSession();
       if (!s.session) {
         setError("Verified, but session not ready. Please try again.");
@@ -80,7 +82,7 @@ export default function Verify() {
         console.error("resend otp error:", otpErr);
         return;
       }
-      setMsg("Code resent. Check inbox/spam.");
+      setMsg("Code resent. Check inbox or spam.");
     } finally {
       setLoading(false);
     }
@@ -89,25 +91,24 @@ export default function Verify() {
   return (
     <div className="min-h-screen grid place-items-center bg-white px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-orange-600 mb-1 text-center">ROAM</h1>
-        <p className="text-center text-gray-600 mb-6">Enter Verification Code</p>
+        <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
+        <p className="text-center text-gray-600 mb-8">Enter Verification Code</p>
 
         <form
           onSubmit={verifyCode}
-          className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3"
+          className="bg-white rounded-3xl border border-gray-200 p-6 space-y-4 shadow-sm"
         >
-          {/* show email so they know where the code was sent */}
-          <input
-            type="email"
-            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
-            value={email}
-            readOnly
-          />
+          {email && (
+            <p className="text-sm text-gray-500 text-center break-all">
+              Code sent to <span className="font-medium text-gray-700">{email}</span>
+            </p>
+          )}
 
           <input
             inputMode="numeric"
             placeholder="6-digit code"
-            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
+            className={darkInputClass}
+            style={{ WebkitTextFillColor: "#ffffff" }}
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
             maxLength={6}
@@ -116,7 +117,7 @@ export default function Verify() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl bg-orange-600 py-2.5 text-white font-semibold active:bg-orange-700 disabled:opacity-50"
+            className="w-full rounded-2xl bg-orange-600 py-3 text-white text-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
           >
             {loading ? "Verifying…" : "Verify code"}
           </button>
@@ -125,16 +126,15 @@ export default function Verify() {
             type="button"
             onClick={resend}
             disabled={loading}
-            className="w-full rounded-2xl border border-gray-300 text-gray-800 py-2.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
+            className="w-full rounded-2xl border border-gray-300 bg-white py-3 text-gray-800 text-lg font-semibold hover:bg-gray-50 disabled:opacity-50"
           >
             Resend code
           </button>
 
-          {/* Back to email page */}
           <button
             type="button"
             onClick={() => nav("/register")}
-            className="w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-sm text-white placeholder-gray-400"
+            className="w-full rounded-2xl border border-gray-300 bg-white py-3 text-gray-700 text-base font-semibold hover:bg-gray-50"
           >
             ← Back to Email
           </button>

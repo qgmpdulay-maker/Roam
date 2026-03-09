@@ -433,7 +433,7 @@ export default function Dashboard() {
         </MapContainer>
       </div>
 
- {/* Filters */}
+      {/* Filters */}
       <div className="grid grid-cols-3 gap-2">
         <select
           className="rounded-xl border border-gray-300 bg-white p-2 text-sm"
@@ -473,7 +473,7 @@ export default function Dashboard() {
       <div className="rounded-xl border border-gray-200 bg-white p-3">
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-semibold">Recent Violations</div>
-          <div className="text-xs text-gray-500">Latest 5 matching filters</div>
+          <div className="text-xs text-gray-500">Most recent filtered results</div>
         </div>
 
         <div className="space-y-2">
@@ -513,94 +513,6 @@ export default function Dashboard() {
               );
             })
           )}
-        </div>
-      </div>
-
-      {/* Violations feed */}
-      <div className="rounded-xl border border-gray-200 bg-white p-3 flex-1">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-sm font-semibold">Violations Feed</div>
-          <div className="text-xs text-gray-500">{filtered.length} total</div>
-        </div>
-
-        <div className="h-full max-h-[420px] overflow-y-auto pr-1">
-          <ul className="divide-y divide-gray-100">
-            {filtered.map((v) => {
-              const zoneKey = zoneKeyFromRow(v.street_name, v.zone_name) ?? "bangoy";
-              const streetLabel = v.street_name || ZONES[zoneKey].label;
-
-              return (
-                <li key={v.id} className="py-0">
-                  <Link
-                    to={`/violation/${v.id}`}
-                    className="block py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/70 rounded-lg -mx-2 px-2 hover:bg-gray-50"
-                  >
-                    <div className="flex items-start gap-3">
-                      {v.image_url ? (
-                        <img
-                          src={v.image_url}
-                          alt=""
-                          className="h-12 w-16 rounded object-cover"
-                        />
-                      ) : (
-                        <div className="h-12 w-16 rounded bg-gray-100 grid place-items-center text-[10px] text-gray-500">
-                          No Image
-                        </div>
-                      )}
-
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <div className="font-medium">
-                            {titleCase(v.vehicle_class) || "Vehicle"}
-                          </div>
-                          <span
-                            className={`text-xs ${
-                              statusLabel(v.status) === "Resolved"
-                                ? "text-green-600"
-                                : "text-orange-600"
-                            }`}
-                          >
-                            {statusLabel(v.status)}
-                          </span>
-                        </div>
-
-                        <div className="text-xs text-gray-600">
-                          {v.violation_type || "Violation"} • {streetLabel}
-                        </div>
-
-                        <div className="text-[11px] text-gray-400">
-                          {prettyDate(v.timestamp ?? v.created_at)}
-                          {typeof v.duration_seconds === "number" && (
-                            <> • {v.duration_seconds}s</>
-                          )}
-                        </div>
-                      </div>
-
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 text-gray-300"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        aria-hidden="true"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
-
-            {filtered.length === 0 && (
-              <li className="py-6 text-center text-xs text-gray-500">
-                No violations match your filters.
-              </li>
-            )}
-          </ul>
         </div>
       </div>
 

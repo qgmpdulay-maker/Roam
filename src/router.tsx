@@ -30,7 +30,19 @@ function Protected({ children }: { children: JSX.Element }) {
   const { user, initialized } = useAuth();
 
   if (!initialized) return null;
-  return user ? children : <Navigate to="/login" replace />;
+
+  const otpRequired = localStorage.getItem("roam_otp_required") === "1";
+  const otpVerified = localStorage.getItem("roam_otp_verified") === "1";
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (otpRequired && !otpVerified) {
+    return <Navigate to="/login-verify" replace />;
+  }
+
+  return children;
 }
 
 export const router = createBrowserRouter(
@@ -41,11 +53,14 @@ export const router = createBrowserRouter(
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/verify-register" element={<Verify />} />
-      <Route path="/verify-login" element={<LoginVerify />} />
+      <Route path="/login-verify" element={<LoginVerify />} />
       <Route path="/set-password" element={<SetPassword />} />
       <Route path="/forgot" element={<Forgot />} />
       <Route path="/reset" element={<Reset />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+
+      {/* Optional backward-compatible redirect */}
+      <Route path="/verify-login" element={<Navigate to="/login-verify" replace />} />
 
       {/* Protected routes with app layout */}
       <Route

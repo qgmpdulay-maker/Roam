@@ -2,9 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
-const darkInputClass =
-  "w-full rounded-xl border border-gray-600 bg-gray-800 p-3 text-center text-lg tracking-widest text-white placeholder-gray-400 caret-white focus:outline-none focus:ring-2 focus:ring-orange-500";
-
 export default function LoginVerify() {
   const nav = useNavigate();
   const [code, setCode] = useState("");
@@ -12,6 +9,9 @@ export default function LoginVerify() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+
+  const darkInputClass =
+    "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
 
   useEffect(() => {
     const pendingEmail = localStorage.getItem("roam_pending_email") || "";
@@ -53,6 +53,7 @@ export default function LoginVerify() {
         return;
       }
 
+      localStorage.setItem("roam_otp_verified", "1");
       localStorage.removeItem("roam_otp_required");
       localStorage.removeItem("roam_pending_email");
 
@@ -99,23 +100,25 @@ export default function LoginVerify() {
 
   async function backToLogin() {
     localStorage.removeItem("roam_otp_required");
+    localStorage.removeItem("roam_otp_verified");
     localStorage.removeItem("roam_pending_email");
     await supabase.auth.signOut();
     nav("/login", { replace: true });
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-white px-4">
+    <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-orange-600 mb-1 text-center">ROAM</h1>
-        <p className="text-center text-gray-600 mb-6">Login Verification</p>
+        <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
+        <p className="text-center text-gray-400 mb-8">Login Verification</p>
 
         <form
           onSubmit={handleVerify}
-          className="bg-gray-900 rounded-2xl border border-gray-700 p-5 space-y-4"
+          className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm"
         >
           <p className="text-sm text-gray-300 text-center">
-            Enter the 6-digit code sent to <span className="font-medium text-white">{email}</span> to complete login.
+            Enter the 6-digit code sent to{" "}
+            <span className="font-medium text-white">{email}</span> to complete login.
           </p>
 
           <input
@@ -134,7 +137,7 @@ export default function LoginVerify() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl bg-orange-600 py-2.5 text-white font-semibold active:bg-orange-700 disabled:opacity-50"
+            className="w-full rounded-2xl bg-orange-600 py-3 text-white text-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
           >
             {loading ? "Verifying…" : "Verify login"}
           </button>
@@ -143,7 +146,7 @@ export default function LoginVerify() {
             type="button"
             onClick={resendCode}
             disabled={loading}
-            className="w-full rounded-2xl border border-gray-300 py-2.5 font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+            className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-3 text-white text-lg font-semibold hover:bg-gray-700 disabled:opacity-50"
           >
             Resend code
           </button>
@@ -151,7 +154,7 @@ export default function LoginVerify() {
           <button
             type="button"
             onClick={backToLogin}
-            className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-2.5 font-semibold text-white hover:bg-gray-700"
+            className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-3 text-gray-200 text-base font-semibold hover:bg-gray-700"
           >
             ← Back to Login
           </button>

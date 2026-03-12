@@ -8,8 +8,9 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+
   const darkInputClass =
-  "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
+    "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
 
   async function sendCode(e: React.FormEvent) {
     e.preventDefault();
@@ -42,25 +43,25 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-white px-4">
+    <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-orange-600 mb-1 text-center">ROAM</h1>
-        <p className="text-center text-gray-600 mb-6">Create Account</p>
+        <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
+        <p className="text-center text-gray-400 mb-8">Create Account</p>
 
         <form
           onSubmit={sendCode}
-          className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3"
+          className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm"
         >
-        <input
-          type="email"
-          placeholder="Email"
-          className={darkInputClass}
-          style={{ WebkitTextFillColor: "#ffffff" }}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          autoComplete="email"
-        />
+          <input
+            type="email"
+            placeholder="Email"
+            className={darkInputClass}
+            style={{ WebkitTextFillColor: "#ffffff" }}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
 
           <button
             type="submit"
@@ -70,14 +71,14 @@ export default function Register() {
             {loading ? "Sending…" : "Send verification code"}
           </button>
 
-          {msg && <p className="text-center text-sm text-green-600">{msg}</p>}
-          {error && <p className="text-center text-sm text-red-600">{error}</p>}
+          {msg && <p className="text-center text-sm text-green-400">{msg}</p>}
+          {error && <p className="text-center text-sm text-red-400">{error}</p>}
 
           <div className="flex items-center justify-between pt-1">
             <button
               type="button"
               onClick={() => nav("/login")}
-              className="text-sm text-gray-600 hover:underline"
+              className="text-sm text-gray-400 hover:underline"
             >
               ← Back to Login
             </button>
@@ -85,7 +86,7 @@ export default function Register() {
             <button
               type="button"
               onClick={() => nav("/forgot")}
-              className="text-sm text-orange-600 hover:underline"
+              className="text-sm text-orange-500 hover:underline"
             >
               Forgot password?
             </button>

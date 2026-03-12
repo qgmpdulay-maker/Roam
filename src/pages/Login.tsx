@@ -19,20 +19,7 @@ export default function Login() {
 
     const cleanEmail = email.trim();
 
-    if (!cleanEmail) {
-      setError("Please enter your email.");
-      setLoading(false);
-      return;
-    }
-
-    if (!password) {
-      setError("Please enter your password.");
-      setLoading(false);
-      return;
-    }
-
     try {
-      // Step 1: password login
       const { error: authError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
@@ -43,7 +30,6 @@ export default function Login() {
         return;
       }
 
-      // Step 2: send login verification code
       const { error: otpErr } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
         options: { shouldCreateUser: false },
@@ -55,7 +41,6 @@ export default function Login() {
         return;
       }
 
-      // Mark login as pending second verification
       localStorage.setItem("roam_otp_required", "1");
       localStorage.setItem("roam_otp_verified", "0");
       localStorage.setItem("roam_pending_email", cleanEmail);

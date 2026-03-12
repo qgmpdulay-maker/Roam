@@ -8,8 +8,9 @@ export default function Forgot() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+
   const darkInputClass =
-  "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
+    "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,7 +23,6 @@ export default function Forgot() {
     }
 
     setSending(true);
-
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/reset`,
@@ -41,14 +41,14 @@ export default function Forgot() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-white px-4">
+    <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
       <div className="w-full max-w-sm">
         <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
-        <p className="text-center text-gray-600 mb-8">Reset your password</p>
+        <p className="text-center text-gray-400 mb-8">Reset your password</p>
 
         <form
           onSubmit={onSubmit}
-          className="bg-white rounded-3xl border border-gray-200 p-6 space-y-4 shadow-sm"
+          className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm"
         >
           <input
             type="email"
@@ -69,14 +69,14 @@ export default function Forgot() {
             {sending ? "Sending…" : "Send reset link"}
           </button>
 
-          {error && <p className="text-center text-sm text-red-500">{error}</p>}
-          {info && <p className="text-center text-sm text-green-600">{info}</p>}
+          {error && <p className="text-center text-sm text-red-400">{error}</p>}
+          {info && <p className="text-center text-sm text-green-400">{info}</p>}
 
           <div className="text-center pt-1">
             <button
               type="button"
               onClick={() => nav("/login")}
-              className="text-sm text-gray-600 hover:underline"
+              className="text-sm text-gray-400 hover:underline"
             >
               Back to sign in
             </button>

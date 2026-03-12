@@ -11,8 +11,9 @@ export default function Verify() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+
   const darkInputClass =
-  "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
+    "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
 
   useEffect(() => {
     const e = params.get("email");
@@ -76,12 +77,16 @@ export default function Verify() {
 
     setLoading(true);
     try {
-      const { error: otpErr } = await supabase.auth.signInWithOtp({ email: eTrim });
+      const { error: otpErr } = await supabase.auth.signInWithOtp({
+        email: eTrim,
+      });
+
       if (otpErr) {
         setError(`Could not resend code: ${otpErr.message}`);
         console.error("resend otp error:", otpErr);
         return;
       }
+
       setMsg("Code resent. Check inbox or spam.");
     } finally {
       setLoading(false);
@@ -89,18 +94,18 @@ export default function Verify() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-white px-4">
+    <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
       <div className="w-full max-w-sm">
         <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
-        <p className="text-center text-gray-600 mb-8">Enter Verification Code</p>
+        <p className="text-center text-gray-400 mb-8">Enter Verification Code</p>
 
         <form
           onSubmit={verifyCode}
-          className="bg-white rounded-3xl border border-gray-200 p-6 space-y-4 shadow-sm"
+          className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm"
         >
           {email && (
-            <p className="text-sm text-gray-500 text-center break-all">
-              Code sent to <span className="font-medium text-gray-700">{email}</span>
+            <p className="text-sm text-gray-400 text-center break-all">
+              Code sent to <span className="font-medium text-gray-200">{email}</span>
             </p>
           )}
 
@@ -126,7 +131,7 @@ export default function Verify() {
             type="button"
             onClick={resend}
             disabled={loading}
-            className="w-full rounded-2xl border border-gray-300 bg-white py-3 text-gray-800 text-lg font-semibold hover:bg-gray-50 disabled:opacity-50"
+            className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-3 text-white text-lg font-semibold hover:bg-gray-700 disabled:opacity-50"
           >
             Resend code
           </button>
@@ -134,13 +139,13 @@ export default function Verify() {
           <button
             type="button"
             onClick={() => nav("/register")}
-            className="w-full rounded-2xl border border-gray-300 bg-white py-3 text-gray-700 text-base font-semibold hover:bg-gray-50"
+            className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-3 text-gray-200 text-base font-semibold hover:bg-gray-700"
           >
             ← Back to Email
           </button>
 
-          {msg && <p className="text-center text-sm text-green-600">{msg}</p>}
-          {error && <p className="text-center text-sm text-red-600">{error}</p>}
+          {msg && <p className="text-center text-sm text-green-400">{msg}</p>}
+          {error && <p className="text-center text-sm text-red-400">{error}</p>}
         </form>
       </div>
     </div>

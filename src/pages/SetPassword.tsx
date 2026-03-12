@@ -112,7 +112,7 @@ export default function SetPassword() {
             <button
               type="button"
               onClick={() => nav("/register")}
-              className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-3 text-white text-base font-semibold hover:bg-gray-700"
+              className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-3 text-white text-lg font-semibold hover:bg-gray-700"
             >
               Go to Register
             </button>

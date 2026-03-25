@@ -117,6 +117,8 @@ function normalizeVehicleClass(value?: string | null) {
     van: "van",
     vans: "van",
 
+    bus: "",
+    buses: "",
     buse: "",
   };
 
@@ -124,7 +126,7 @@ function normalizeVehicleClass(value?: string | null) {
     return aliasMap[cleaned];
   }
 
-  return cleaned.replace(/s$/, "");
+  return cleaned;
 }
 
 function colorForClass(c?: string) {
@@ -575,26 +577,26 @@ export default function Statistics() {
     return Math.max(1, ...mapHeatPoints.map((p) => p.count));
   }, [mapHeatPoints]);
 
-  const classCounts = useMemo(() => {
-    const map = new Map<string, number>();
+const classCounts = useMemo(() => {
+  const map = new Map<string, number>();
 
-    for (const v of violationsCharts) {
-      const key = normalizeVehicleClass(v.vehicle_class);
-      if (!key) continue;
+  for (const v of violationsCharts) {
+    const key = normalizeVehicleClass(v.vehicle_class);
+    if (!key) continue;
 
-      map.set(key, (map.get(key) ?? 0) + 1);
-    }
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
 
-    const rows = Array.from(map.entries()).map(([key, count]) => ({
-      name: key.replace(/\b\w/g, (s) => s.toUpperCase()),
-      key,
-      count,
-      fill: colorForClass(key),
-    }));
+  const rows = Array.from(map.entries()).map(([key, count]) => ({
+    name: key.replace(/\b\w/g, (s) => s.toUpperCase()),
+    key,
+    count,
+    fill: colorForClass(key),
+  }));
 
-    rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-    return rows;
-  }, [violationsCharts]);
+  rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return rows;
+}, [violationsCharts]);
 
   const classChartData = useMemo(() => classCounts.filter((d) => d.count > 0), [classCounts]);
 

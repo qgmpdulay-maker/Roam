@@ -45,11 +45,6 @@ type ZonePolygon = {
 
 const SITE_CENTER: LatLngExpression = [7.08029007530404, 125.62265921360454];
 
-const FIXED_STREETS = [
-  "F. Bangoy St.",
-  "F. Bangoy St. & Soliman St.",
-];
-
 const STREET_ZONES: ZonePolygon[] = [
   {
     id: "bangoy",
@@ -91,8 +86,49 @@ const VEHICLE_COLORS: Record<string, string> = {
   van: "#06B6D4",
 };
 
+function normalizeVehicleClass(value?: string | null) {
+  const raw = (value || "").toLowerCase().trim();
+  if (!raw) return "";
+
+  const cleaned = raw.replace(/\s+/g, " ");
+
+  const aliasMap: Record<string, string> = {
+    motorcycle: "motorcycle",
+    motorcycles: "motorcycle",
+
+    "pickup truck": "pickup truck",
+    "pickup trucks": "pickup truck",
+
+    sedan: "sedan",
+    sedans: "sedan",
+
+    suv: "suv",
+    suvs: "suv",
+
+    tricycle: "tricycle",
+    tricycles: "tricycle",
+
+    truck: "truck",
+    trucks: "truck",
+
+    uv: "uv",
+    uvs: "uv",
+
+    van: "van",
+    vans: "van",
+
+    buse: "", // 🚫 completely remove it
+  };
+
+  if (aliasMap.hasOwnProperty(cleaned)) {
+    return aliasMap[cleaned];
+  }
+
+  return cleaned.replace(/s$/, "");
+}
+
 function colorForClass(c?: string) {
-  const key = (c || "").toLowerCase().trim();
+  const key = normalizeVehicleClass(c);
   return VEHICLE_COLORS[key] ?? "#9CA3AF";
 }
 
@@ -173,6 +209,36 @@ function isWithinManilaWindow(tsISO: string) {
   const h = getManilaHour(tsISO);
   if (h === null) return false;
   return h >= WINDOW_START_HOUR && h < WINDOW_END_HOUR;
+}
+
+function normalizeStreetValue(value?: string | null) {
+  return (value || "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[.,]/g, "")
+    .replace(/\bstreet\b/g, "st")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function canonicalStreetLabel(value?: string | null) {
+  const raw = (value || "").trim();
+  const normalized = normalizeStreetValue(raw);
+
+  if (!normalized) return "";
+
+  if (normalized === "f bangoy st") {
+    return "F. Bangoy St.";
+  }
+
+  if (
+    normalized === "f bangoy st and soliman st" ||
+    normalized === "f bangoy st soliman st"
+  ) {
+    return "F. Bangoy St. & Soliman St.";
+  }
+
+  return raw;
 }
 
 function MapFitBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
@@ -461,45 +527,51 @@ export default function Statistics() {
     return Math.max(1, ...mapHeatPoints.map((p) => p.count));
   }, [mapHeatPoints]);
 
-  const classCounts = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const v of violationsCharts) {
-      const key = (v.vehicle_class || "").toLowerCase().trim();
-      if (!key) continue;
-      map.set(key, (map.get(key) ?? 0) + 1);
-    }
-    const rows = Array.from(map.entries()).map(([key, count]) => ({
-      name: key.replace(/\b\w/g, (s) => s.toUpperCase()),
-      key,
-      count,
-      fill: colorForClass(key),
-    }));
-    rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-    return rows;
-  }, [violationsCharts]);
+const classCounts = useMemo(() => {
+  const map = new Map<string, number>();
+
+  for (const v of violationsCharts) {
+    const key = normalizeVehicleClass(v.vehicle_class);
+    if (!key) continue;
+
+    // 🚫 remove the invalid class
+    if (key === "buse") continue;
+
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+
+  const rows = Array.from(map.entries()).map(([key, count]) => ({
+    name: key.replace(/\b\w/g, (s) => s.toUpperCase()),
+    key,
+    count,
+    fill: colorForClass(key),
+  }));
+
+  rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return rows;
+}, [violationsCharts]);
 
   const classChartData = useMemo(() => classCounts.filter((d) => d.count > 0), [classCounts]);
 
   const violationsByStreet = useMemo(() => {
-    const map = new Map<string, number>();
-
-    for (const street of FIXED_STREETS) {
-      map.set(street, 0);
-    }
+    const counts = new Map<string, number>();
 
     for (const v of violationsAllStreet) {
-      const street = (v.street_name || "").trim();
+      const sourceStreet = v.street_name || v.zone_name || "";
+      const street = canonicalStreetLabel(sourceStreet);
+
       if (!street) continue;
 
-      if (map.has(street)) {
-        map.set(street, (map.get(street) ?? 0) + 1);
-      }
+      counts.set(street, (counts.get(street) ?? 0) + 1);
     }
 
-    return FIXED_STREETS.map((name) => ({
+    const rows = Array.from(counts.entries()).map(([name, count]) => ({
       name,
-      count: map.get(name) ?? 0,
+      count,
     }));
+
+    rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return rows;
   }, [violationsAllStreet]);
 
   return (
@@ -524,7 +596,7 @@ export default function Statistics() {
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="roam-input mt-1 text-left pr-10 appearance-none [&::-webkit-date-and-time-value]:text-left"
+                className="roam-input mt-1 appearance-none pr-10 text-left [&::-webkit-date-and-time-value]:text-left"
                 style={{ WebkitAppearance: "none" }}
               />
             </div>
@@ -535,7 +607,7 @@ export default function Statistics() {
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="roam-input mt-1 text-left pr-10 appearance-none [&::-webkit-date-and-time-value]:text-left"
+                className="roam-input mt-1 appearance-none pr-10 text-left [&::-webkit-date-and-time-value]:text-left"
                 style={{ WebkitAppearance: "none" }}
               />
             </div>
@@ -544,7 +616,7 @@ export default function Statistics() {
               <button
                 type="button"
                 onClick={onApplyDates}
-                className="w-full rounded-2xl bg-orange-600 py-3 text-white font-semibold hover:bg-orange-700 active:bg-orange-800 disabled:opacity-50"
+                className="w-full rounded-2xl bg-orange-600 py-3 font-semibold text-white hover:bg-orange-700 active:bg-orange-800 disabled:opacity-50"
                 disabled={chartsLoading || windowLoading}
               >
                 Apply
@@ -552,7 +624,7 @@ export default function Statistics() {
               <button
                 type="button"
                 onClick={onClearDates}
-                className="w-full rounded-2xl border border-gray-300 py-3 text-sm font-semibold bg-white hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
+                className="w-full rounded-2xl border border-gray-300 bg-white py-3 text-sm font-semibold hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:bg-gray-800"
                 disabled={chartsLoading || windowLoading}
               >
                 Clear
@@ -561,7 +633,7 @@ export default function Statistics() {
           </div>
 
           {dateError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-700 text-sm">
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {dateError}
             </div>
           )}
@@ -580,7 +652,7 @@ export default function Statistics() {
 
           <div className="text-right">
             <div className="text-xs text-muted">Peak point</div>
-            <div className="text-2xl font-bold text-main tabular-nums">{maxMapPointCount}</div>
+            <div className="text-2xl font-bold tabular-nums text-main">{maxMapPointCount}</div>
           </div>
         </div>
 
@@ -646,7 +718,7 @@ export default function Statistics() {
         </div>
 
         <div className="mt-4">
-          <div className="text-xs font-semibold text-main mb-2">Time</div>
+          <div className="mb-2 text-xs font-semibold text-main">Time</div>
           <div className="grid grid-cols-4 gap-2 md:grid-cols-8">
             {hourOptions.map((h) => {
               const active = h === selectedHour;
@@ -658,7 +730,7 @@ export default function Statistics() {
                   className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
                     active
                       ? "bg-orange-600 text-white"
-                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-900 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
+                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:bg-gray-800"
                   }`}
                 >
                   {formatHourLabel(h)}
@@ -681,9 +753,9 @@ export default function Statistics() {
       </div>
 
       <div className="card p-4">
-        <h2 className="text-lg font-semibold mb-3 text-main">Vehicle Class Distribution</h2>
+        <h2 className="mb-3 text-lg font-semibold text-main">Vehicle Class Distribution</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_190px] gap-3 items-center">
+        <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_190px]">
           <div style={{ width: "100%", height: 380 }}>
             <ResponsiveContainer>
               <BarChart
@@ -712,15 +784,18 @@ export default function Statistics() {
           </div>
 
           <div className="max-h-[340px] overflow-auto pr-1">
-            <div className="text-[11px] font-semibold text-main mb-2">Legend</div>
+            <div className="mb-2 text-[11px] font-semibold text-main">Legend</div>
             <div className="space-y-2">
               {classChartData.map((d) => (
                 <div key={d.key} className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="inline-block h-3 w-3 rounded-sm" style={{ backgroundColor: d.fill }} />
-                    <span className="text-[11px] text-sub truncate">{d.name}</span>
+                  <div className="min-w-0 flex items-center gap-2">
+                    <span
+                      className="inline-block h-3 w-3 rounded-sm"
+                      style={{ backgroundColor: d.fill }}
+                    />
+                    <span className="truncate text-[11px] text-sub">{d.name}</span>
                   </div>
-                  <span className="text-[11px] font-semibold text-main tabular-nums">{d.count}</span>
+                  <span className="text-[11px] font-semibold tabular-nums text-main">{d.count}</span>
                 </div>
               ))}
             </div>
@@ -729,16 +804,16 @@ export default function Statistics() {
       </div>
 
       <div className="card p-4">
-        <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="mb-3 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-main">Violations by Street</h2>
             <p className="text-xs text-muted">
-              {streetLoading ? "Loading…" : "All records • not affected by date filters"}
+              {streetLoading ? "Loading…" : "All records • based on database values"}
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_190px] gap-3 items-center">
+        <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_190px]">
           <div style={{ width: "100%", height: 320 }}>
             <ResponsiveContainer>
               <BarChart
@@ -748,16 +823,9 @@ export default function Statistics() {
               >
                 <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
 
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 12 }}
-                  interval={0}
-                />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} />
 
-                <YAxis
-                  allowDecimals={false}
-                  width={30}
-                />
+                <YAxis allowDecimals={false} width={30} />
 
                 <Tooltip />
 
@@ -774,14 +842,12 @@ export default function Statistics() {
           </div>
 
           <div className="max-h-[300px] overflow-auto pr-1">
-            <div className="text-[11px] font-semibold text-main mb-2">Street totals</div>
+            <div className="mb-2 text-[11px] font-semibold text-main">Street totals</div>
             <div className="space-y-2">
               {violationsByStreet.map((d) => (
                 <div key={d.name} className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] text-sub truncate">{d.name}</span>
-                  <span className="text-[11px] font-semibold text-main tabular-nums">
-                    {d.count}
-                  </span>
+                  <span className="truncate text-[11px] text-sub">{d.name}</span>
+                  <span className="text-[11px] font-semibold tabular-nums text-main">{d.count}</span>
                 </div>
               ))}
             </div>

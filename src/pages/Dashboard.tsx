@@ -35,12 +35,7 @@ const ZONES = {
     key: "bangoy",
     label: "F. Bangoy St.",
     coords: [7.080341958130678, 125.62260139267624] as LatLngExpression,
-    matchers: [
-      "f bangoy st",
-      "f bangoy",
-      "bangoy st",
-      "bangoy",
-    ].map(normalize),
+    matchers: ["f bangoy st", "f bangoy", "bangoy st", "bangoy"].map(normalize),
   },
 } as const;
 
@@ -156,6 +151,22 @@ type ZoneSummary = {
   resolved: number;
 };
 
+type VehicleSummary = {
+  type: string;
+  count: number;
+};
+
+type StreetSummary = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+type StatusSummary = {
+  label: string;
+  count: number;
+};
+
 /* =============================================================================
    Dashboard
 ============================================================================= */
@@ -168,10 +179,10 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [zoneFilter, setZoneFilter] = useState<string>("all");
 
-  const mapCenter = useMemo(
-    () => averageCenter(ZONE_LIST.map((z) => z.coords)),
-    []
-  );
+  // Search for recent violations
+  const [recentSearch, setRecentSearch] = useState("");
+
+  const mapCenter = useMemo(() => averageCenter(ZONE_LIST.map((z) => z.coords)), []);
 
   async function fetchViolations() {
     const { data, error } = await supabase
@@ -299,9 +310,71 @@ export default function Dashboard() {
     return Object.values(base).sort((a, b) => b.count - a.count);
   }, [filtered]);
 
+  // Searchable filtered results for the recent violations section
+  const searchedViolations = useMemo(() => {
+    const q = normalize(recentSearch);
+
+    if (!q) return filtered;
+
+    return filtered.filter((v) => {
+      const zoneKey = zoneKeyFromRow(v.street_name, v.zone_name);
+      const streetName = v.street_name || (zoneKey ? ZONES[zoneKey].label : "");
+      const violationType = v.violation_type || "";
+      const vehicleType = v.vehicle_class || "";
+      const statusText = statusLabel(v.status);
+
+      const haystack = [streetName, violationType, vehicleType, statusText]
+        .map(normalize)
+        .join(" ");
+
+      return haystack.includes(q);
+    });
+  }, [filtered, recentSearch]);
+
   const recentViolations = useMemo(() => {
-    return filtered.slice(0, 5);
-  }, [filtered]);
+    return searchedViolations.slice(0, 5);
+  }, [searchedViolations]);
+
+  const recentSummary = useMemo(() => {
+    const vehicleMap = new Map<string, number>();
+    const streetMap = new Map<string, number>();
+    const statusMap = new Map<string, number>();
+
+    recentViolations.forEach((v) => {
+      const vehicleKey = (v.vehicle_class || "unknown").toLowerCase();
+      vehicleMap.set(vehicleKey, (vehicleMap.get(vehicleKey) ?? 0) + 1);
+
+      const zoneKey = zoneKeyFromRow(v.street_name, v.zone_name);
+      const streetLabel = v.street_name || (zoneKey ? ZONES[zoneKey].label : "Unknown Street");
+      streetMap.set(streetLabel, (streetMap.get(streetLabel) ?? 0) + 1);
+
+      const status = statusLabel(v.status);
+      statusMap.set(status, (statusMap.get(status) ?? 0) + 1);
+    });
+
+    const vehicles: VehicleSummary[] = Array.from(vehicleMap.entries())
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const streets: StreetSummary[] = Array.from(streetMap.entries())
+      .map(([label, count]) => ({
+        key: label,
+        label,
+        count,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const statuses: StatusSummary[] = Array.from(statusMap.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      total: recentViolations.length,
+      vehicles,
+      streets,
+      statuses,
+    };
+  }, [recentViolations]);
 
   return (
     <div className="min-h-screen flex flex-col px-4 py-4 gap-4 text-gray-900 dark:text-gray-100">
@@ -309,22 +382,31 @@ export default function Dashboard() {
       <div>
         <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Dashboard</h1>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Signed in as <span className="font-medium text-gray-700 dark:text-gray-200">{user?.email ?? "—"}</span>
+          Signed in as{" "}
+          <span className="font-medium text-gray-700 dark:text-gray-200">
+            {user?.email ?? "—"}
+          </span>
         </p>
       </div>
 
       {/* Quick stats */}
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 text-center">
-          <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{stats.today}</div>
+          <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            {stats.today}
+          </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">Violations Today</div>
         </div>
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 text-center">
-          <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{stats.pending}</div>
+          <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            {stats.pending}
+          </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">Pending</div>
         </div>
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3 text-center">
-          <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{stats.resolved}</div>
+          <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            {stats.resolved}
+          </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">Resolved</div>
         </div>
       </div>
@@ -332,7 +414,9 @@ export default function Dashboard() {
       {/* Useful summaries */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
-          <div className="text-sm font-semibold mb-3 text-gray-900 dark:text-gray-100">Top Streets</div>
+          <div className="text-sm font-semibold mb-3 text-gray-900 dark:text-gray-100">
+            Top Streets
+          </div>
           <div className="space-y-2">
             {zoneSummaries.map((z) => (
               <div
@@ -340,8 +424,12 @@ export default function Dashboard() {
                 className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 px-3 py-2"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{z.label}</div>
-                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{z.count}</div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {z.label}
+                  </div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {z.count}
+                  </div>
                 </div>
                 <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Pending {z.pending} • Resolved {z.resolved}
@@ -365,8 +453,12 @@ export default function Dashboard() {
                     className="h-3 w-3 rounded-full shrink-0"
                     style={{ backgroundColor: colorForClass(item.type) }}
                   />
-                  <div className="flex-1 text-sm text-gray-900 dark:text-gray-100">{titleCase(item.type)}</div>
-                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.count}</div>
+                  <div className="flex-1 text-sm text-gray-900 dark:text-gray-100">
+                    {titleCase(item.type)}
+                  </div>
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {item.count}
+                  </div>
                 </div>
               ))}
             </div>
@@ -378,7 +470,9 @@ export default function Dashboard() {
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
         <div className="px-3 pt-3 pb-2 flex items-center justify-between">
           <div>
-            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Street Hotspots</div>
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Street Hotspots
+            </div>
             <div className="text-xs text-gray-500 dark:text-gray-400">
               Filtered overview of active streets
             </div>
@@ -460,13 +554,26 @@ export default function Dashboard() {
           <option value="bangoy">{ZONES.bangoy.label}</option>
           <option value="bangoy_soliman">{ZONES.bangoy_soliman.label}</option>
         </select>
+
+        {/* Long search field below the filters */}
+        <input
+          type="text"
+          placeholder="Search street, violation, vehicle, or status"
+          className="col-span-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+          value={recentSearch}
+          onChange={(e) => setRecentSearch(e.target.value)}
+        />
       </div>
 
       {/* Recent violations summary */}
       <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
         <div className="flex items-center justify-between mb-2">
-          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">Recent Violations</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">Most recent filtered results</div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            Recent Violations
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Most recent filtered results
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -475,7 +582,7 @@ export default function Dashboard() {
           ) : (
             recentViolations.map((v) => {
               const zoneKey = zoneKeyFromRow(v.street_name, v.zone_name) ?? "bangoy";
-              const streetLabel = v.street_name || ZONES[zoneKey].label;
+              const streetName = v.street_name || ZONES[zoneKey].label;
 
               return (
                 <Link
@@ -489,7 +596,7 @@ export default function Dashboard() {
                         {titleCase(v.vehicle_class) || "Vehicle"}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {v.violation_type || "Violation"} • {streetLabel}
+                        {v.violation_type || "Violation"} • {streetName}
                       </div>
                     </div>
                     <div
@@ -507,6 +614,88 @@ export default function Dashboard() {
             })
           )}
         </div>
+      </div>
+
+      {/* Bottom summary based on recent violations */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-3">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            Recent Violations Summary
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Based on {recentSummary.total} recent result{recentSummary.total === 1 ? "" : "s"}
+          </div>
+        </div>
+
+        {recentSummary.total === 0 ? (
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            No summary available.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 p-3">
+              <div className="text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">
+                Vehicle Classes
+              </div>
+              <div className="space-y-2">
+                {recentSummary.vehicles.map((item) => (
+                  <div key={item.type} className="flex items-center gap-3">
+                    <span
+                      className="h-3 w-3 rounded-full shrink-0"
+                      style={{ backgroundColor: colorForClass(item.type) }}
+                    />
+                    <div className="flex-1 text-sm text-gray-900 dark:text-gray-100">
+                      {titleCase(item.type) || "Unknown"}
+                    </div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {item.count}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 p-3">
+              <div className="text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">
+                Streets
+              </div>
+              <div className="space-y-2">
+                {recentSummary.streets.map((item) => (
+                  <div key={item.key} className="flex items-center justify-between gap-3">
+                    <div className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                      {item.label}
+                    </div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {item.count}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/60 p-3">
+              <div className="text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">
+                Status
+              </div>
+              <div className="space-y-2">
+                {recentSummary.statuses.map((item) => (
+                  <div key={item.label} className="flex items-center justify-between gap-3">
+                    <div
+                      className={`text-sm ${
+                        item.label === "Resolved" ? "text-green-600" : "text-orange-600"
+                      }`}
+                    >
+                      {item.label}
+                    </div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {item.count}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="h-6" />

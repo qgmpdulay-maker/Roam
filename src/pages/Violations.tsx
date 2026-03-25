@@ -9,6 +9,7 @@ const STREETS = {
 
 type Status = "pending" | "resolved" | "all";
 type StreetKey = "all" | "SOLIMAN" | "FBANGOY";
+type SortOrder = "asc" | "desc";
 
 type Violation = {
   id: string;
@@ -39,75 +40,131 @@ function streetLabel(k: StreetKey): string {
   return "All Streets";
 }
 
+function getViolationDate(v: Violation) {
+  return new Date(v.timestamp ?? v.created_at ?? Date.now());
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function Violations() {
   const nav = useNavigate();
   const [rows, setRows] = useState<Violation[]>([]);
   const [statusFilter, setStatusFilter] = useState<Status>("pending");
   const [streetFilter, setStreetFilter] = useState<StreetKey>("all");
+
+  // Start and end date filters
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
+
+  // Sort direction for the list
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
   const [loading, setLoading] = useState(true);
 
   async function fetchData() {
     setLoading(true);
+
     const { data, error } = await supabase
       .from("violations")
-      .select("id,timestamp,street_name,zone_name,violation_type,vehicle_class,image_url,status,created_at")
+      .select(
+        "id,timestamp,street_name,zone_name,violation_type,vehicle_class,image_url,status,created_at"
+      )
       .order("timestamp", { ascending: false })
       .limit(500);
+
     if (!error && data) setRows(data as Violation[]);
     if (error) console.error(error);
+
     setLoading(false);
   }
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
   useEffect(() => {
     fetchData();
+
     const ch = supabase
       .channel("realtime-violations-dropdowns")
       .on("postgres_changes", { event: "*", schema: "public", table: "violations" }, () => {
         fetchData();
       })
       .subscribe();
+
     channelRef.current = ch;
+
     return () => {
       void ch.unsubscribe();
     };
   }, []);
 
   const filtered = useMemo(() => {
-    return rows.filter((r) => {
+    const result = rows.filter((r) => {
+      // STATUS FILTER
       const sOk = statusFilter === "all" ? true : normStatus(r.status) === statusFilter;
+      // STREET FILTER
       const stKey = streetKey(r.street_name ?? r.zone_name ?? "");
       const zOk = streetFilter === "all" ? true : stKey === streetFilter;
-      return sOk && zOk;
+      // START - END DATE FILTER
+      const violationDate = getViolationDate(r);
+      const rowDate = toDateInputValue(violationDate);
+      // If a start date exists, the violation date must be on or after it
+      const startOk = startDateFilter ? rowDate >= startDateFilter : true;
+      // If an end date exists, the violation date must be on or before it
+      const endOk = endDateFilter ? rowDate <= endDateFilter : true;
+      return sOk && zOk && startOk && endOk;
     });
-  }, [rows, statusFilter, streetFilter]);
+
+    // SORTING
+    result.sort((a, b) => {
+      const aTime = getViolationDate(a).getTime();
+      const bTime = getViolationDate(b).getTime();
+      // asc = oldest first
+      // desc = newest first
+      return sortOrder === "asc" ? aTime - bTime : bTime - aTime;
+    });
+
+    return result;
+  }, [rows, statusFilter, streetFilter, startDateFilter, endDateFilter, sortOrder]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Violation[]>();
+
     const push = (label: string, v: Violation) => {
       const arr = map.get(label) ?? [];
       arr.push(v);
       map.set(label, arr);
     };
+
+    // Splits the filtered results into sections according to street
     if (streetFilter === "all") {
       filtered.forEach((v) => {
         const k = streetKey(v.street_name ?? v.zone_name ?? "");
         const label = streetLabel(k === "all" ? "all" : k);
         push(label, v);
       });
+
+      // Controls the order of the street sections
       const order = [streetLabel("SOLIMAN"), streetLabel("FBANGOY"), streetLabel("all")];
+
       return Array.from(map.entries()).sort((a, b) => {
         const ia = order.indexOf(a[0]);
         const ib = order.indexOf(b[0]);
+
         if (ia === -1 && ib === -1) return a[0].localeCompare(b[0]);
         if (ia === -1) return 1;
         if (ib === -1) return -1;
         return ia - ib;
       });
-    } else {
-      map.set(streetLabel(streetFilter), filtered);
-      return Array.from(map.entries());
     }
+
+    // If a specific street is selected, show only one section
+    map.set(streetLabel(streetFilter), filtered);
+    return Array.from(map.entries());
   }, [filtered, streetFilter]);
 
   const counts = useMemo(() => {
@@ -118,13 +175,13 @@ export default function Violations() {
 
   return (
     <div className="min-h-screen px-4 py-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Violations</h1>
         <div className="text-xs text-gray-500">{counts.total} total</div>
       </div>
 
-      {/* Dropdown filters */}
-      <div className="grid grid-cols-2 gap-2 mb-3">
+      {/* Filter controls */}
+      <div className="mb-3 grid grid-cols-2 gap-2">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-gray-500">Status</span>
           <select
@@ -150,10 +207,61 @@ export default function Violations() {
             <option value="FBANGOY">{STREETS.FBANGOY}</option>
           </select>
         </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-gray-500">Start Date</span>
+          <input
+            type="date"
+            className="w-full rounded-xl border border-gray-300 bg-white p-2 text-sm"
+            value={startDateFilter}
+            onChange={(e) => setStartDateFilter(e.target.value)}
+            max={endDateFilter || undefined}
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-gray-500">End Date</span>
+          <input
+            type="date"
+            className="w-full rounded-xl border border-gray-300 bg-white p-2 text-sm"
+            value={endDateFilter}
+            onChange={(e) => setEndDateFilter(e.target.value)}
+            min={startDateFilter || undefined}
+          />
+        </label>
+
+        <label className="block col-span-2">
+          <span className="mb-1 block text-xs font-medium text-gray-500">Sort</span>
+          <select
+            className="w-full rounded-xl border border-gray-300 bg-white p-2 text-sm"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+          >
+            <option value="desc">Newest First</option>
+            <option value="asc">Oldest First</option>
+          </select>
+        </label>
       </div>
 
-      {/* Summary tiles */}
-      <div className="grid grid-cols-3 gap-3 mb-3">
+      {/* Reset button */}
+      <div className="mb-3">
+        <button
+          type="button"
+          className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 active:bg-gray-50"
+          onClick={() => {
+            setStatusFilter("pending");
+            setStreetFilter("all");
+            setStartDateFilter("");
+            setEndDateFilter("");
+            setSortOrder("desc");
+          }}
+        >
+          Reset Filters
+        </button>
+      </div>
+
+      {/* Summary cards */}
+      <div className="mb-3 grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
           <div className="text-xl font-semibold">{counts.pending}</div>
           <div className="text-xs text-gray-500">Pending</div>
@@ -168,8 +276,8 @@ export default function Violations() {
         </div>
       </div>
 
-      {/* Sectioned list */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      {/* Violations list */}
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         {loading && <div className="p-4 text-xs text-gray-500">Loading…</div>}
 
         {!loading && grouped.length === 0 && (
@@ -182,12 +290,14 @@ export default function Violations() {
           <div className="divide-y divide-gray-100">
             {grouped.map(([label, items]) => (
               <section key={label}>
-                <div className="sticky top-0 z-[1] bg-white/95 backdrop-blur px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-100">
+                <div className="sticky top-0 z-[1] border-b border-gray-100 bg-white/95 px-3 py-2 text-xs font-medium text-gray-500 backdrop-blur">
                   {label} • {items.length}
                 </div>
+
                 <ul className="divide-y divide-gray-100">
                   {items.map((v) => {
                     const status = normStatus(v.status);
+
                     return (
                       <li
                         key={v.id}
@@ -200,25 +310,34 @@ export default function Violations() {
                               src={v.image_url}
                               alt=""
                               className="h-12 w-16 rounded object-cover"
-                              onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                              }}
                             />
                           ) : (
-                            <div className="h-12 w-16 rounded bg-gray-100 grid place-items-center text-[10px] text-gray-500">
+                            <div className="grid h-12 w-16 place-items-center rounded bg-gray-100 text-[10px] text-gray-500">
                               No Image
                             </div>
                           )}
+
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
                               <div className="font-medium capitalize">{v.vehicle_class ?? "vehicle"}</div>
-                              <span className={`text-xs ${status === "resolved" ? "text-green-600" : "text-orange-600"}`}>
+                              <span
+                                className={`text-xs ${
+                                  status === "resolved" ? "text-green-600" : "text-orange-600"
+                                }`}
+                              >
                                 {status === "resolved" ? "Resolved" : "Pending"}
                               </span>
                             </div>
+
                             <div className="text-xs text-gray-600">
                               {v.violation_type ?? "Violation"} • {v.street_name ?? v.zone_name ?? "—"}
                             </div>
+
                             <div className="text-[11px] text-gray-400">
-                              {new Date(v.timestamp ?? v.created_at ?? Date.now()).toLocaleString()}
+                              {getViolationDate(v).toLocaleString()}
                             </div>
                           </div>
                         </div>
@@ -231,6 +350,7 @@ export default function Violations() {
           </div>
         )}
       </div>
+
       <div className="h-24" />
     </div>
   );

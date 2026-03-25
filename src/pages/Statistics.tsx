@@ -31,8 +31,8 @@ type Violation = {
   street_name?: string | null;
   zone_id?: string | null;
   zone_name?: string | null;
-  lat?: number | null;
-  lng?: number | null;
+  lat?: number | string | null;
+  lng?: number | string | null;
 };
 
 type ZonePolygon = {
@@ -117,10 +117,10 @@ function normalizeVehicleClass(value?: string | null) {
     van: "van",
     vans: "van",
 
-    buse: "", // 🚫 completely remove it
+    buse: "",
   };
 
-  if (aliasMap.hasOwnProperty(cleaned)) {
+  if (Object.prototype.hasOwnProperty.call(aliasMap, cleaned)) {
     return aliasMap[cleaned];
   }
 
@@ -130,6 +130,12 @@ function normalizeVehicleClass(value?: string | null) {
 function colorForClass(c?: string) {
   const key = normalizeVehicleClass(c);
   return VEHICLE_COLORS[key] ?? "#9CA3AF";
+}
+
+function parseCoord(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 function heatColor(t: number) {
@@ -469,6 +475,14 @@ export default function Statistics() {
     return violationsWindowRange.filter((v) => v.timestamp && isWithinManilaWindow(v.timestamp));
   }, [violationsWindowRange]);
 
+  const windowViolationsWithCoords = useMemo(() => {
+    return windowViolations.filter((v) => {
+      const lat = parseCoord(v.lat);
+      const lng = parseCoord(v.lng);
+      return lat != null && lng != null;
+    });
+  }, [windowViolations]);
+
   const zoneBounds = useMemo(() => {
     const all = STREET_ZONES.flatMap((z) => z.polygon);
     try {
@@ -484,10 +498,46 @@ export default function Statistics() {
     return arr;
   }, []);
 
+  const hourCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+
+    for (const v of windowViolations) {
+      if (!v.timestamp) continue;
+
+      const lat = parseCoord(v.lat);
+      const lng = parseCoord(v.lng);
+      if (lat == null || lng == null) continue;
+
+      const h = getManilaHour(v.timestamp);
+      if (h === null) continue;
+
+      counts.set(h, (counts.get(h) ?? 0) + 1);
+    }
+
+    return hourOptions.map((hour) => ({
+      hour,
+      count: counts.get(hour) ?? 0,
+    }));
+  }, [windowViolations, hourOptions]);
+
+  useEffect(() => {
+    const best = hourCounts
+      .filter((x) => x.count > 0)
+      .sort((a, b) => b.count - a.count || a.hour - b.hour)[0];
+
+    if (best) {
+      setSelectedHour((prev) => (prev === best.hour ? prev : best.hour));
+    }
+  }, [hourCounts]);
+
   const selectedHourViolations = useMemo(() => {
     return windowViolations.filter((v) => {
       if (!v.timestamp) return false;
-      if (v.lat == null || v.lng == null) return false;
+
+      const lat = parseCoord(v.lat);
+      const lng = parseCoord(v.lng);
+      if (lat == null || lng == null) return false;
+
       const h = getManilaHour(v.timestamp);
       return h === selectedHour;
     });
@@ -497,12 +547,10 @@ export default function Statistics() {
     const buckets = new Map<string, { lat: number; lng: number; count: number }>();
 
     for (const v of selectedHourViolations) {
-      if (v.lat == null || v.lng == null) continue;
+      const lat = parseCoord(v.lat);
+      const lng = parseCoord(v.lng);
 
-      const lat = Number(v.lat);
-      const lng = Number(v.lng);
-
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      if (lat == null || lng == null) continue;
 
       const latKey = lat.toFixed(4);
       const lngKey = lng.toFixed(4);
@@ -527,29 +575,26 @@ export default function Statistics() {
     return Math.max(1, ...mapHeatPoints.map((p) => p.count));
   }, [mapHeatPoints]);
 
-const classCounts = useMemo(() => {
-  const map = new Map<string, number>();
+  const classCounts = useMemo(() => {
+    const map = new Map<string, number>();
 
-  for (const v of violationsCharts) {
-    const key = normalizeVehicleClass(v.vehicle_class);
-    if (!key) continue;
+    for (const v of violationsCharts) {
+      const key = normalizeVehicleClass(v.vehicle_class);
+      if (!key) continue;
 
-    // 🚫 remove the invalid class
-    if (key === "buse") continue;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
 
-    map.set(key, (map.get(key) ?? 0) + 1);
-  }
+    const rows = Array.from(map.entries()).map(([key, count]) => ({
+      name: key.replace(/\b\w/g, (s) => s.toUpperCase()),
+      key,
+      count,
+      fill: colorForClass(key),
+    }));
 
-  const rows = Array.from(map.entries()).map(([key, count]) => ({
-    name: key.replace(/\b\w/g, (s) => s.toUpperCase()),
-    key,
-    count,
-    fill: colorForClass(key),
-  }));
-
-  rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  return rows;
-}, [violationsCharts]);
+    rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    return rows;
+  }, [violationsCharts]);
 
   const classChartData = useMemo(() => classCounts.filter((d) => d.count > 0), [classCounts]);
 
@@ -646,7 +691,9 @@ const classCounts = useMemo(() => {
             <h2 className="text-lg font-semibold text-main">Map Heatmap</h2>
             <p className="text-xs text-muted">
               {windowRangeLabel} • {formatHourLabel(selectedHour)} •{" "}
-              {windowLoading ? "Loading…" : `${selectedHourViolations.length} record(s)`}
+              {windowLoading
+                ? "Loading…"
+                : `${selectedHourViolations.length} shown / ${windowViolationsWithCoords.length} with coordinates / ${windowViolations.length} total`}
             </p>
           </div>
 
@@ -720,20 +767,24 @@ const classCounts = useMemo(() => {
         <div className="mt-4">
           <div className="mb-2 text-xs font-semibold text-main">Time</div>
           <div className="grid grid-cols-4 gap-2 md:grid-cols-8">
-            {hourOptions.map((h) => {
-              const active = h === selectedHour;
+            {hourCounts.map(({ hour, count }) => {
+              const active = hour === selectedHour;
+
               return (
                 <button
-                  key={h}
+                  key={hour}
                   type="button"
-                  onClick={() => setSelectedHour(h)}
+                  onClick={() => setSelectedHour(hour)}
                   className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
                     active
                       ? "bg-orange-600 text-white"
                       : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-white dark:hover:bg-gray-800"
                   }`}
                 >
-                  {formatHourLabel(h)}
+                  <div>{formatHourLabel(hour)}</div>
+                  <div className={`text-[11px] ${active ? "text-orange-100" : "text-gray-500"}`}>
+                    {count}
+                  </div>
                 </button>
               );
             })}

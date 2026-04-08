@@ -212,7 +212,7 @@ export default function Violations() {
           <span className="mb-1 block text-xs font-medium text-gray-500">Start Date</span>
           <input
             type="date"
-            className="w-full rounded-xl border border-gray-300 bg-white p-2 text-sm"
+            className="w-full h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm"
             value={startDateFilter}
             onChange={(e) => setStartDateFilter(e.target.value)}
             max={endDateFilter || undefined}
@@ -223,7 +223,7 @@ export default function Violations() {
           <span className="mb-1 block text-xs font-medium text-gray-500">End Date</span>
           <input
             type="date"
-            className="w-full rounded-xl border border-gray-300 bg-white p-2 text-sm"
+            className="w-full h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm"
             value={endDateFilter}
             onChange={(e) => setEndDateFilter(e.target.value)}
             min={startDateFilter || undefined}

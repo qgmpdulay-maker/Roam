@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   Cell,
+  Label,
 } from "recharts";
 
 import {
@@ -75,6 +76,17 @@ const STREET_ZONES: ZonePolygon[] = [
   },
 ];
 
+const STREET_BAR_COLORS = [
+  "#F97316", // orange
+  "#8B5CF6", // violet
+  "#06B6D4", // cyan
+  "#22C55E", // green
+  "#EAB308", // yellow
+  "#EF4444", // red
+  "#3B82F6", // blue
+  "#EC4899", // pink
+];
+
 const VEHICLE_COLORS: Record<string, string> = {
   motorcycle: "#8B5CF6",
   "pickup truck": "#EC4899",
@@ -95,28 +107,20 @@ function normalizeVehicleClass(value?: string | null) {
   const aliasMap: Record<string, string> = {
     motorcycle: "motorcycle",
     motorcycles: "motorcycle",
-
     "pickup truck": "pickup truck",
     "pickup trucks": "pickup truck",
-
     sedan: "sedan",
     sedans: "sedan",
-
     suv: "suv",
     suvs: "suv",
-
     tricycle: "tricycle",
     tricycles: "tricycle",
-
     truck: "truck",
     trucks: "truck",
-
     uv: "uv",
     uvs: "uv",
-
     van: "van",
     vans: "van",
-
     bus: "",
     buses: "",
     buse: "",
@@ -264,15 +268,56 @@ function MapFitBounds({ bounds }: { bounds: LatLngBoundsExpression | null }) {
   return null;
 }
 
+function wrapText(value: string, maxLineLength = 12) {
+  const words = value.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxLineLength) {
+      current = next;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines;
+}
+
+function StreetTick(props: any) {
+  const { x, y, payload } = props;
+  const lines = wrapText(String(payload.value), 14);
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0}
+        y={12}
+        textAnchor="middle"
+        fill="#6B7280"
+        fontSize={12}
+      >
+        {lines.map((line: string, index: number) => (
+          <tspan key={index} x={0} dy={index === 0 ? 0 : 14}>
+            {line}
+          </tspan>
+        ))}
+      </text>
+    </g>
+  );
+}
+
 const X_AXIS_PAD = { left: 26, right: 26 };
-const Y_AXIS_WIDTH = 36;
+const Y_AXIS_WIDTH = 48;
 const BAR_SIZE = 38;
 const MAX_BAR_SIZE = 52;
 const BAR_CATEGORY_GAP = "16%";
 const BAR_GAP = 8;
 
 const X_AXIS_COMMON = {
-  tick: false,
   axisLine: false,
   tickLine: false,
   padding: X_AXIS_PAD,
@@ -577,52 +622,57 @@ export default function Statistics() {
     return Math.max(1, ...mapHeatPoints.map((p) => p.count));
   }, [mapHeatPoints]);
 
-const classCounts = useMemo(() => {
-  const map = new Map<string, number>();
+  const classCounts = useMemo(() => {
+    const map = new Map<string, number>();
 
-  for (const v of violationsCharts) {
-    const key = normalizeVehicleClass(v.vehicle_class);
-    if (!key) continue;
+    for (const v of violationsCharts) {
+      const key = normalizeVehicleClass(v.vehicle_class);
+      if (!key) continue;
 
-    map.set(key, (map.get(key) ?? 0) + 1);
-  }
-
-  const rows = Array.from(map.entries()).map(([key, count]) => ({
-    name: key.replace(/\b\w/g, (s) => s.toUpperCase()),
-    key,
-    count,
-    fill: colorForClass(key),
-  }));
-
-  rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  return rows;
-}, [violationsCharts]);
-
-  const classChartData = useMemo(() => classCounts.filter((d) => d.count > 0), [classCounts]);
-
-  const violationsByStreet = useMemo(() => {
-    const counts = new Map<string, number>();
-
-    for (const v of violationsAllStreet) {
-      const sourceStreet = v.street_name || v.zone_name || "";
-      const street = canonicalStreetLabel(sourceStreet);
-
-      if (!street) continue;
-
-      counts.set(street, (counts.get(street) ?? 0) + 1);
+      map.set(key, (map.get(key) ?? 0) + 1);
     }
 
-    const rows = Array.from(counts.entries()).map(([name, count]) => ({
-      name,
+    const rows = Array.from(map.entries()).map(([key, count]) => ({
+      name: key.replace(/\b\w/g, (s) => s.toUpperCase()),
+      key,
       count,
+      fill: colorForClass(key),
     }));
 
     rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
     return rows;
-  }, [violationsAllStreet]);
+  }, [violationsCharts]);
+
+  const classChartData = useMemo(() => classCounts.filter((d) => d.count > 0), [classCounts]);
+
+const violationsByStreet = useMemo(() => {
+  const counts = new Map<string, number>();
+
+  for (const v of violationsAllStreet) {
+    const sourceStreet = v.street_name || v.zone_name || "";
+    const street = canonicalStreetLabel(sourceStreet);
+
+    if (!street) continue;
+
+    counts.set(street, (counts.get(street) ?? 0) + 1);
+  }
+
+  const rows = Array.from(counts.entries()).map(([name, count], index) => ({
+    name,
+    count,
+    fill: STREET_BAR_COLORS[index % STREET_BAR_COLORS.length],
+  }));
+
+  rows.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  return rows.map((row, index) => ({
+    ...row,
+    fill: STREET_BAR_COLORS[index % STREET_BAR_COLORS.length],
+  }));
+}, [violationsAllStreet]);
 
   return (
-    <div className="page space-y-4">
+    <div className="page space-y-3 px-3 pb-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-main">Statistics</h1>
@@ -632,7 +682,7 @@ const classCounts = useMemo(() => {
         </div>
       </div>
 
-      <div className="card p-4">
+      <div className="card p-3">
         <div className="flex flex-col gap-3">
           <div className="text-sm font-semibold text-main">Date range</div>
 
@@ -687,7 +737,7 @@ const classCounts = useMemo(() => {
         </div>
       </div>
 
-      <div className="card p-4">
+      <div className="card p-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-main">Map Heatmap</h2>
@@ -805,108 +855,160 @@ const classCounts = useMemo(() => {
         </div>
       </div>
 
-      <div className="card p-4">
-        <h2 className="mb-3 text-lg font-semibold text-main">Vehicle Class Distribution</h2>
+<div className="card p-3">
+  <h2 className="mb-3 text-lg font-semibold text-main">Vehicle Class Distribution</h2>
 
-        <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_190px]">
-          <div style={{ width: "100%", height: 380 }}>
-            <ResponsiveContainer>
-              <BarChart
-                data={classChartData}
-                margin={{ top: 12, right: 16, left: 5, bottom: 0 }}
-                barCategoryGap={BAR_CATEGORY_GAP}
-                barGap={BAR_GAP}
-              >
-                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
-                <XAxis {...X_AXIS_COMMON} />
-                <YAxis {...Y_AXIS_COMMON} />
-                <Tooltip />
-                <Bar
-                  dataKey="count"
-                  radius={[10, 10, 0, 0]}
-                  isAnimationActive={false}
-                  barSize={BAR_SIZE}
-                  maxBarSize={MAX_BAR_SIZE}
-                >
-                  {classChartData.map((d, i) => (
-                    <Cell key={i} fill={d.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+  <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_190px]">
+    <div style={{ width: "100%", height: 350 }}>
+      <ResponsiveContainer>
+        <BarChart
+          data={classChartData}
+          margin={{ top: 12, right: 16, left: 10, bottom: 35 }}
+          barCategoryGap={BAR_CATEGORY_GAP}
+          barGap={BAR_GAP}
+        >
+          <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
 
-          <div className="max-h-[340px] overflow-auto pr-1">
-            <div className="mb-2 text-[11px] font-semibold text-main">Legend</div>
-            <div className="space-y-2">
-              {classChartData.map((d) => (
-                <div key={d.key} className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex items-center gap-2">
-                    <span
-                      className="inline-block h-3 w-3 rounded-sm"
-                      style={{ backgroundColor: d.fill }}
-                    />
-                    <span className="truncate text-[11px] text-sub">{d.name}</span>
-                  </div>
-                  <span className="text-[11px] font-semibold tabular-nums text-main">{d.count}</span>
-                </div>
-              ))}
+          <XAxis
+            {...X_AXIS_COMMON}
+            dataKey="name"
+            tick={false}
+            height={30}
+          >
+            <Label
+              value="Vehicle Class"
+              position="insideBottom"
+              offset={-4}
+              style={{ fill: "#374151", fontSize: 12, fontWeight: 600 }}
+            />
+          </XAxis>
+
+          <YAxis {...Y_AXIS_COMMON} tick={{ fontSize: 12, fill: "#6B7280" }}>
+            <Label
+              value="Number of Violations"
+              angle={-90}
+              position="insideLeft"
+              style={{ fill: "#374151", fontSize: 12, fontWeight: 600, textAnchor: "middle" }}
+            />
+          </YAxis>
+
+          <Tooltip />
+
+          <Bar
+            dataKey="count"
+            radius={[10, 10, 0, 0]}
+            isAnimationActive={false}
+            barSize={BAR_SIZE}
+            maxBarSize={MAX_BAR_SIZE}
+          >
+            {classChartData.map((d, i) => (
+              <Cell key={i} fill={d.fill} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+
+    <div className="max-h-[340px] overflow-auto pr-1">
+      <div className="mb-2 text-[11px] font-semibold text-main">Legend</div>
+      <div className="space-y-2">
+        {classChartData.map((d) => (
+          <div key={d.key} className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex items-center gap-2">
+              <span
+                className="inline-block h-3 w-3 rounded-sm"
+                style={{ backgroundColor: d.fill }}
+              />
+              <span className="truncate text-[11px] text-sub">{d.name}</span>
             </div>
+            <span className="text-[11px] font-semibold tabular-nums text-main">{d.count}</span>
           </div>
-        </div>
+        ))}
       </div>
+    </div>
+  </div>
+</div>
 
-      <div className="card p-4">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-main">Violations by Street</h2>
-            <p className="text-xs text-muted">
-              {streetLoading ? "Loading…" : "All records • based on database values"}
-            </p>
-          </div>
-        </div>
+<div className="card p-3 md:p-4">
+  <div className="mb-2 flex items-start justify-between gap-2">
+    <div>
+      <h2 className="text-lg font-semibold text-main">Violations by Street</h2>
+      <p className="text-xs text-muted">
+        {streetLoading ? "Loading…" : "All records • based on database values"}
+      </p>
+    </div>
+  </div>
 
-        <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_190px]">
-          <div style={{ width: "100%", height: 320 }}>
-            <ResponsiveContainer>
-              <BarChart
-                data={violationsByStreet}
-                margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
-                barCategoryGap="35%"
-              >
-                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
+  <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[1fr_180px]">
+    <div style={{ width: "100%", height: 380 }}>
+      <ResponsiveContainer>
+        <BarChart
+  data={violationsByStreet}
+  margin={{ top: 6, right: 6, left: 0, bottom: 8 }}
+  barCategoryGap="35%"
+>
+  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.3} />
 
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} />
+  <XAxis
+  dataKey="name"
+  tick={false} // ❌ keep street names hidden
+  axisLine={false}
+  tickLine={false}
+  height={36} // ✅ small but enough for label
+>
+  <Label
+    value="Street"
+    position="insideBottom"
+    offset={-6} // ✅ pull label UP to avoid big space
+    style={{ fill: "#374151", fontSize: 12, fontWeight: 600 }}
+  />
+</XAxis>
 
-                <YAxis allowDecimals={false} width={30} />
+  <YAxis allowDecimals={false} width={48} tick={{ fontSize: 12, fill: "#6B7280" }}>
+    <Label
+      value="Number of Violations"
+      angle={-90}
+      position="insideLeft"
+      style={{ fill: "#374151", fontSize: 12, fontWeight: 600, textAnchor: "middle" }}
+    />
 
-                <Tooltip />
+  </YAxis>
 
-                <Bar
-                  dataKey="count"
-                  fill="#F97316"
-                  radius={[10, 10, 0, 0]}
-                  barSize={70}
-                  isAnimationActive={false}
-                  label={{ position: "top", fontSize: 12 }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+  <Tooltip />
 
-          <div className="max-h-[300px] overflow-auto pr-1">
-            <div className="mb-2 text-[11px] font-semibold text-main">Street totals</div>
-            <div className="space-y-2">
-              {violationsByStreet.map((d) => (
-                <div key={d.name} className="flex items-center justify-between gap-3">
-                  <span className="truncate text-[11px] text-sub">{d.name}</span>
-                  <span className="text-[11px] font-semibold tabular-nums text-main">{d.count}</span>
-                </div>
-              ))}
+  <Bar
+    dataKey="count"
+    radius={[10, 10, 0, 0]}
+    barSize={70}
+    isAnimationActive={false}
+  >
+    {violationsByStreet.map((d) => (
+      <Cell key={d.name} fill={d.fill} />
+    ))}
+  </Bar>
+</BarChart>
+      </ResponsiveContainer>
+    </div>
+
+    <div className="max-h-[220px] overflow-auto pr-1">
+      <div className="mb-2 text-[11px] font-semibold text-main">Street totals</div>
+      <div className="space-y-2">
+        {violationsByStreet.map((d) => (
+          <div key={d.name} className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex items-center gap-2">
+              <span
+                className="inline-block h-3 w-3 rounded-sm"
+                style={{ backgroundColor: d.fill }}
+              />
+              <span className="truncate text-[11px] text-sub">{d.name}</span>
             </div>
+            <span className="text-[11px] font-semibold tabular-nums text-main">{d.count}</span>
           </div>
-        </div>
+        ))}
       </div>
+    </div>
+  </div>
+</div>
 
       <div className="h-6" />
     </div>

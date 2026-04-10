@@ -51,19 +51,17 @@ function toDateInputValue(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+const fieldClass =
+  "w-full min-w-0 rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm text-gray-900 outline-none appearance-none";
+
 export default function Violations() {
   const nav = useNavigate();
   const [rows, setRows] = useState<Violation[]>([]);
   const [statusFilter, setStatusFilter] = useState<Status>("pending");
   const [streetFilter, setStreetFilter] = useState<StreetKey>("all");
-
-  // Start and end date filters
   const [startDateFilter, setStartDateFilter] = useState("");
   const [endDateFilter, setEndDateFilter] = useState("");
-
-  // Sort direction for the list
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-
   const [loading, setLoading] = useState(true);
 
   async function fetchData() {
@@ -104,27 +102,22 @@ export default function Violations() {
 
   const filtered = useMemo(() => {
     const result = rows.filter((r) => {
-      // STATUS FILTER
       const sOk = statusFilter === "all" ? true : normStatus(r.status) === statusFilter;
-      // STREET FILTER
       const stKey = streetKey(r.street_name ?? r.zone_name ?? "");
       const zOk = streetFilter === "all" ? true : stKey === streetFilter;
-      // START - END DATE FILTER
+
       const violationDate = getViolationDate(r);
       const rowDate = toDateInputValue(violationDate);
-      // If a start date exists, the violation date must be on or after it
+
       const startOk = startDateFilter ? rowDate >= startDateFilter : true;
-      // If an end date exists, the violation date must be on or before it
       const endOk = endDateFilter ? rowDate <= endDateFilter : true;
+
       return sOk && zOk && startOk && endOk;
     });
 
-    // SORTING
     result.sort((a, b) => {
       const aTime = getViolationDate(a).getTime();
       const bTime = getViolationDate(b).getTime();
-      // asc = oldest first
-      // desc = newest first
       return sortOrder === "asc" ? aTime - bTime : bTime - aTime;
     });
 
@@ -140,7 +133,6 @@ export default function Violations() {
       map.set(label, arr);
     };
 
-    // Splits the filtered results into sections according to street
     if (streetFilter === "all") {
       filtered.forEach((v) => {
         const k = streetKey(v.street_name ?? v.zone_name ?? "");
@@ -148,7 +140,6 @@ export default function Violations() {
         push(label, v);
       });
 
-      // Controls the order of the street sections
       const order = [streetLabel("SOLIMAN"), streetLabel("FBANGOY"), streetLabel("all")];
 
       return Array.from(map.entries()).sort((a, b) => {
@@ -162,7 +153,6 @@ export default function Violations() {
       });
     }
 
-    // If a specific street is selected, show only one section
     map.set(streetLabel(streetFilter), filtered);
     return Array.from(map.entries());
   }, [filtered, streetFilter]);
@@ -180,60 +170,63 @@ export default function Violations() {
         <div className="text-xs text-gray-500">{counts.total} total</div>
       </div>
 
-      {/* Filter controls */}
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-500">Status</span>
-          <select
-            className="w-full rounded-xl border border-gray-300 bg-white p-2 text-sm"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as Status)}
-          >
-            <option value="pending">Pending</option>
-            <option value="resolved">Resolved</option>
-            <option value="all">All</option>
-          </select>
-        </label>
+      <div className="mb-3 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Status</span>
+            <select
+              className={fieldClass}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as Status)}
+            >
+              <option value="pending">Pending</option>
+              <option value="resolved">Resolved</option>
+              <option value="all">All</option>
+            </select>
+          </label>
 
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-500">Street</span>
-          <select
-            className="w-full rounded-xl border border-gray-300 bg-white p-2 text-sm"
-            value={streetFilter}
-            onChange={(e) => setStreetFilter(e.target.value as StreetKey)}
-          >
-            <option value="all">All Streets</option>
-            <option value="SOLIMAN">{STREETS.SOLIMAN}</option>
-            <option value="FBANGOY">{STREETS.FBANGOY}</option>
-          </select>
-        </label>
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Street</span>
+            <select
+              className={fieldClass}
+              value={streetFilter}
+              onChange={(e) => setStreetFilter(e.target.value as StreetKey)}
+            >
+              <option value="all">All Streets</option>
+              <option value="SOLIMAN">{STREETS.SOLIMAN}</option>
+              <option value="FBANGOY">{STREETS.FBANGOY}</option>
+            </select>
+          </label>
+        </div>
 
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-500">Start Date</span>
-          <input
-            type="date"
-            className="w-full h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm"
-            value={startDateFilter}
-            onChange={(e) => setStartDateFilter(e.target.value)}
-            max={endDateFilter || undefined}
-          />
-        </label>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-medium text-gray-500">Start Date</span>
+            <input
+              type="date"
+              className={fieldClass}
+              value={startDateFilter}
+              onChange={(e) => setStartDateFilter(e.target.value)}
+              max={endDateFilter || undefined}
+            />
+          </label>
 
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-500">End Date</span>
-          <input
-            type="date"
-            className="w-full h-10 rounded-xl border border-gray-300 bg-white px-3 text-sm"
-            value={endDateFilter}
-            onChange={(e) => setEndDateFilter(e.target.value)}
-            min={startDateFilter || undefined}
-          />
-        </label>
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-medium text-gray-500">End Date</span>
+            <input
+              type="date"
+              className={fieldClass}
+              value={endDateFilter}
+              onChange={(e) => setEndDateFilter(e.target.value)}
+              min={startDateFilter || undefined}
+            />
+          </label>
+        </div>
 
-        <label className="block col-span-2">
+        <label className="block min-w-0">
           <span className="mb-1 block text-xs font-medium text-gray-500">Sort</span>
           <select
-            className="w-full rounded-xl border border-gray-300 bg-white p-2 text-sm"
+            className={fieldClass}
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as SortOrder)}
           >
@@ -243,11 +236,10 @@ export default function Violations() {
         </label>
       </div>
 
-      {/* Reset button */}
       <div className="mb-3">
         <button
           type="button"
-          className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 active:bg-gray-50"
+          className="w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm font-medium text-gray-700 active:bg-gray-50"
           onClick={() => {
             setStatusFilter("pending");
             setStreetFilter("all");
@@ -260,7 +252,6 @@ export default function Violations() {
         </button>
       </div>
 
-      {/* Summary cards */}
       <div className="mb-3 grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
           <div className="text-xl font-semibold">{counts.pending}</div>
@@ -276,7 +267,6 @@ export default function Violations() {
         </div>
       </div>
 
-      {/* Violations list */}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         {loading && <div className="p-4 text-xs text-gray-500">Loading…</div>}
 
@@ -322,7 +312,9 @@ export default function Violations() {
 
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
-                              <div className="font-medium capitalize">{v.vehicle_class ?? "vehicle"}</div>
+                              <div className="font-medium capitalize">
+                                {v.vehicle_class ?? "vehicle"}
+                              </div>
                               <span
                                 className={`text-xs ${
                                   status === "resolved" ? "text-green-600" : "text-orange-600"
@@ -333,7 +325,8 @@ export default function Violations() {
                             </div>
 
                             <div className="text-xs text-gray-600">
-                              {v.violation_type ?? "Violation"} • {v.street_name ?? v.zone_name ?? "—"}
+                              {v.violation_type ?? "Violation"} •{" "}
+                              {v.street_name ?? v.zone_name ?? "—"}
                             </div>
 
                             <div className="text-[11px] text-gray-400">

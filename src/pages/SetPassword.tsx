@@ -4,8 +4,8 @@ import { supabase } from "@/lib/supabase";
 
 const PASSWORD_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$/;
 
-const darkInputClass =
-  "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
+const inputClass =
+  "w-full rounded-2xl border border-gray-300 bg-white p-4 text-base text-gray-900 placeholder-gray-400 caret-gray-900 outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-400 dark:caret-white";
 
 function passwordHint(pw: string) {
   const missing: string[] = [];
@@ -91,28 +91,28 @@ export default function SetPassword() {
 
   if (hasSession === null) {
     return (
-      <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
-        <p className="text-sm text-gray-400">Loading…</p>
+      <div className="min-h-screen grid place-items-center bg-gray-50 px-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+        <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
       </div>
     );
   }
 
   if (hasSession === false) {
     return (
-      <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
+      <div className="min-h-screen grid place-items-center bg-gray-50 px-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
         <div className="w-full max-w-sm">
           <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
-          <p className="text-center text-gray-400 mb-8">Set Password</p>
+          <p className="text-center text-gray-500 mb-8 dark:text-gray-400">Set Password</p>
 
-          <div className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm">
-            <p className="text-sm text-gray-300 text-center">
+          <div className="bg-white rounded-3xl border border-gray-200 p-6 space-y-4 shadow-sm dark:bg-gray-900 dark:border-gray-800">
+            <p className="text-sm text-gray-600 text-center dark:text-gray-300">
               Please verify your email code first.
             </p>
 
             <button
               type="button"
               onClick={() => nav("/register")}
-              className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-3 text-white text-lg font-semibold hover:bg-gray-700"
+              className="w-full rounded-2xl border border-gray-300 bg-white py-3 text-gray-900 text-lg font-semibold hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
             >
               Go to Register
             </button>
@@ -123,20 +123,20 @@ export default function SetPassword() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
+    <div className="min-h-screen grid place-items-center bg-gray-50 px-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <div className="w-full max-w-sm">
         <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
-        <p className="text-center text-gray-400 mb-8">Set Password</p>
+        <p className="text-center text-gray-500 mb-8 dark:text-gray-400">Set Password</p>
 
         <form
           onSubmit={save}
-          className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm"
+          className="bg-white rounded-3xl border border-gray-200 p-6 space-y-4 shadow-sm dark:bg-gray-900 dark:border-gray-800"
         >
           <input
             type="password"
             placeholder="New password"
-            className={darkInputClass}
-            style={{ WebkitTextFillColor: "#ffffff" }}
+            className={inputClass}
+            style={{ WebkitTextFillColor: "currentColor" }}
             value={pw}
             onChange={(e) => setPw(e.target.value)}
             autoComplete="new-password"
@@ -146,15 +146,15 @@ export default function SetPassword() {
           <input
             type="password"
             placeholder="Confirm new password"
-            className={darkInputClass}
-            style={{ WebkitTextFillColor: "#ffffff" }}
+            className={inputClass}
+            style={{ WebkitTextFillColor: "currentColor" }}
             value={pw2}
             onChange={(e) => setPw2(e.target.value)}
             autoComplete="new-password"
             required
           />
 
-          <p className={`text-xs ${hint ? "text-gray-400" : "text-green-400"}`}>
+          <p className={`text-xs ${hint ? "text-gray-500 dark:text-gray-400" : "text-green-600"}`}>
             {hint || "Password format looks good."}
           </p>
 
@@ -166,8 +166,8 @@ export default function SetPassword() {
             {loading ? "Saving…" : "Set password"}
           </button>
 
-          {msg && <p className="text-center text-sm text-green-400">{msg}</p>}
-          {error && <p className="text-center text-sm text-red-400">{error}</p>}
+          {msg && <p className="text-center text-sm text-green-600">{msg}</p>}
+          {error && <p className="text-center text-sm text-red-500">{error}</p>}
         </form>
       </div>
     </div>

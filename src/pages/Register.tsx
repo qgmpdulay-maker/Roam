@@ -2,128 +2,89 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
-export default function Register() {
+export default function Forgot() {
   const nav = useNavigate();
-
   const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [msg, setMsg] = useState("");
+  const [info, setInfo] = useState("");
 
-  const darkInputClass =
-    "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
+  const inputClass =
+    "w-full rounded-2xl border border-gray-300 bg-white p-4 text-base text-gray-900 placeholder-gray-400 caret-gray-900 outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-400 dark:caret-white";
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    if (loading) return;
-
-    setLoading(true);
     setError("");
-    setMsg("");
+    setInfo("");
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = email.trim();
 
     if (!cleanEmail) {
       setError("Please enter your email.");
-      setLoading(false);
       return;
     }
 
+    setSending(true);
     try {
-      // Send OTP (6-digit code)
-      const { error: otpErr } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: {
-          shouldCreateUser: true,
-        },
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: `${window.location.origin}/reset`,
       });
 
-      if (otpErr) {
-        console.error("OTP error:", otpErr);
-
-        // Handle common Supabase errors
-        if (otpErr.message.includes("rate limit")) {
-          setError("Too many attempts. Please wait a moment and try again.");
-        } else {
-          setError(otpErr.message || "Failed to send verification code.");
-        }
-        return;
+      if (error) {
+        setError(error.message);
+      } else {
+        setInfo("A password reset link has been sent to your email.");
       }
-
-      // Save email for verification step
-      localStorage.setItem("roam_register_email", cleanEmail);
-
-      setMsg("Verification code sent. Check your email.");
-
-      // Small delay for better UX
-      setTimeout(() => {
-        nav(`/verify-register?email=${encodeURIComponent(cleanEmail)}`, {
-          replace: true,
-        });
-      }, 800);
-    } catch (err) {
-      console.error("Register error:", err);
-      setError("Unexpected error occurred.");
+    } catch {
+      setError("Unexpected error while sending reset email.");
     } finally {
-      setLoading(false);
+      setSending(false);
     }
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
+    <div className="min-h-screen grid place-items-center bg-gray-50 px-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <div className="w-full max-w-sm">
-        <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">
+        <h1 className="mb-2 text-center text-4xl font-bold text-orange-600">
           ROAM
         </h1>
-        <p className="text-center text-gray-400 mb-8">Create Account</p>
+        <p className="mb-8 text-center text-gray-500 dark:text-gray-400">
+          Reset your password
+        </p>
 
         <form
-          onSubmit={handleSubmit}
-          className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm"
+          onSubmit={onSubmit}
+          className="space-y-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900"
         >
-          {/* Email Input */}
           <input
             type="email"
             placeholder="Email"
-            className={darkInputClass}
-            style={{ WebkitTextFillColor: "#ffffff" }}
+            className={inputClass}
+            style={{ WebkitTextFillColor: "currentColor" }}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
-            inputMode="email"
           />
 
-          {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading}
-            className="w-full rounded-2xl bg-orange-600 py-3 text-white text-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
+            disabled={sending}
+            className="w-full rounded-2xl bg-orange-600 py-3 text-lg font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
           >
-            {loading ? "Sending..." : "Send verification code"}
+            {sending ? "Sending…" : "Send reset link"}
           </button>
 
-          {/* Messages */}
-          {msg && <p className="text-center text-sm text-green-400">{msg}</p>}
-          {error && <p className="text-center text-sm text-red-400">{error}</p>}
+          {error && <p className="text-center text-sm text-red-500">{error}</p>}
+          {info && <p className="text-center text-sm text-green-600">{info}</p>}
 
-          {/* Footer Links */}
-          <div className="flex items-center justify-between pt-1">
+          <div className="pt-1 text-center">
             <button
               type="button"
               onClick={() => nav("/login")}
-              className="text-sm text-gray-400 hover:underline"
+              className="text-sm text-gray-500 hover:underline dark:text-gray-400"
             >
-              ← Back to Login
-            </button>
-
-            <button
-              type="button"
-              onClick={() => nav("/forgot")}
-              className="text-sm text-orange-500 hover:underline"
-            >
-              Forgot password?
+              Back to sign in
             </button>
           </div>
         </form>

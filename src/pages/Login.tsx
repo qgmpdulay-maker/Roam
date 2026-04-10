@@ -9,8 +9,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const darkInputClass =
-    "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
+  const inputClass =
+    "w-full rounded-2xl border border-gray-300 bg-white p-4 text-base text-gray-900 placeholder-gray-400 caret-gray-900 outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-400 dark:caret-white";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,7 +32,6 @@ export default function Login() {
     }
 
     try {
-      // Step 1: password login
       const { error: authError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
@@ -43,7 +42,6 @@ export default function Login() {
         return;
       }
 
-      // Step 2: send login OTP
       const { error: otpErr } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
         options: { shouldCreateUser: false },
@@ -55,7 +53,6 @@ export default function Login() {
         return;
       }
 
-      // Mark this login as pending second-step verification
       localStorage.setItem("roam_otp_required", "1");
       localStorage.setItem("roam_otp_verified", "0");
       localStorage.setItem("roam_pending_email", cleanEmail);
@@ -70,20 +67,22 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
+    <div className="min-h-screen grid place-items-center bg-gray-50 px-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <div className="w-full max-w-sm">
-        <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
-        <p className="text-center text-gray-400 mb-8">Employee Login</p>
+        <h1 className="mb-2 text-center text-4xl font-bold text-orange-600">ROAM</h1>
+        <p className="mb-8 text-center text-gray-500 dark:text-gray-400">
+          Employee Login
+        </p>
 
         <form
           onSubmit={handleSubmit}
-          className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm"
+          className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm space-y-4 dark:border-gray-800 dark:bg-gray-900"
         >
           <input
             type="email"
             placeholder="Email"
-            className={darkInputClass}
-            style={{ WebkitTextFillColor: "#ffffff" }}
+            className={inputClass}
+            style={{ WebkitTextFillColor: "currentColor" }}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -93,8 +92,8 @@ export default function Login() {
           <input
             type="password"
             placeholder="Password"
-            className={darkInputClass}
-            style={{ WebkitTextFillColor: "#ffffff" }}
+            className={inputClass}
+            style={{ WebkitTextFillColor: "currentColor" }}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -104,18 +103,18 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-2xl bg-orange-600 py-3 text-white text-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
+            className="w-full rounded-2xl bg-orange-600 py-3 text-lg font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
           >
             {loading ? "Signing in…" : "Login"}
           </button>
 
-          {error && <p className="text-center text-sm text-red-400">{error}</p>}
+          {error && <p className="text-center text-sm text-red-500">{error}</p>}
 
           <div className="flex items-center justify-between pt-1">
             <button
               type="button"
               onClick={() => nav("/forgot")}
-              className="text-sm text-orange-500 hover:underline"
+              className="text-sm text-orange-600 hover:underline dark:text-orange-500"
             >
               Forgot password?
             </button>
@@ -123,7 +122,7 @@ export default function Login() {
             <button
               type="button"
               onClick={() => nav("/register")}
-              className="text-sm text-gray-400 hover:underline"
+              className="text-sm text-gray-500 hover:underline dark:text-gray-400"
             >
               Create account
             </button>

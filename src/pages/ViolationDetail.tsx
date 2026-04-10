@@ -50,6 +50,17 @@ function safeFilename(name: string) {
   return String(name ?? "").replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+const NOTE_OPTIONS = [
+  "",
+  "Warning issued",
+  "Driver instructed to move vehicle",
+  "Owner contacted and informed",
+  "Repeat violation recorded",
+  "Referred to OPSS",
+  "For towing",
+  "Resolved on site",
+] as const;
+
 const inputClass =
   "w-full rounded-xl border p-3 text-sm bg-white text-gray-900 border-gray-300 placeholder-gray-400 dark:bg-gray-800 dark:text-white dark:border-gray-700 dark:placeholder-gray-400 outline-none";
 const labelClass = "block text-xs text-gray-500 dark:text-gray-400 mb-1";
@@ -174,11 +185,13 @@ export default function ViolationDetail() {
           .maybeSingle();
 
         if (!violatorErr && violator) {
-          if ((violator as any).full_name && !v.violator_name)
+          if ((violator as any).full_name && !v.violator_name) {
             setViolatorName((violator as any).full_name);
+          }
 
-          if ((violator as any).license_plate && !v.license_plate)
+          if ((violator as any).license_plate && !v.license_plate) {
             setPlate(normalizePlate((violator as any).license_plate));
+          }
 
           setAddress((violator as any).address ?? "");
           setContactNo(
@@ -232,10 +245,12 @@ export default function ViolationDetail() {
     }
 
     const nextPlate = normalizePlate(plate).trim();
-    if (!nextPlate)
+    if (!nextPlate) {
       return setError("Please enter a license plate before resolving.");
-    if (!PLATE_REGEX.test(nextPlate))
+    }
+    if (!PLATE_REGEX.test(nextPlate)) {
       return setError("Invalid plate format. Use ABC 123 or ABC 1234.");
+    }
 
     const cleanedContact = contactNo ? contactNo.replace(/[^0-9]/g, "") : "";
     if (cleanedContact && !PHONE_REGEX.test(cleanedContact)) {
@@ -397,7 +412,7 @@ export default function ViolationDetail() {
     }
   }
 
-  if (loading)
+  if (loading) {
     return (
       <div className="min-h-screen px-4 py-4 text-gray-900 dark:text-gray-100">
         <button
@@ -406,11 +421,14 @@ export default function ViolationDetail() {
         >
           Back
         </button>
-        <div className="mt-6 text-sm text-gray-500 dark:text-gray-400">Loading violation…</div>
+        <div className="mt-6 text-sm text-gray-500 dark:text-gray-400">
+          Loading violation…
+        </div>
       </div>
     );
+  }
 
-  if (!row)
+  if (!row) {
     return (
       <div className="min-h-screen px-4 py-4 text-gray-900 dark:text-gray-100">
         <button
@@ -419,9 +437,12 @@ export default function ViolationDetail() {
         >
           Back
         </button>
-        <div className="mt-6 text-sm text-red-600">{error ?? "Violation not found."}</div>
+        <div className="mt-6 text-sm text-red-600">
+          {error ?? "Violation not found."}
+        </div>
       </div>
     );
+  }
 
   return (
     <div className="min-h-screen px-4 py-4 text-gray-900 dark:text-gray-100">
@@ -432,7 +453,9 @@ export default function ViolationDetail() {
         >
           Back
         </button>
-        <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Violation</h1>
+        <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          Violation
+        </h1>
         <div className="w-[64px]" />
       </div>
 
@@ -471,7 +494,9 @@ export default function ViolationDetail() {
               <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                 Violator photo
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">Capture the violator</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Capture the violator
+              </div>
             </div>
             {violatorImgUrl ? (
               <a
@@ -483,7 +508,9 @@ export default function ViolationDetail() {
                 View
               </a>
             ) : (
-              <span className="text-xs text-gray-400 dark:text-gray-500">No upload</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">
+                No upload
+              </span>
             )}
           </div>
 
@@ -491,6 +518,7 @@ export default function ViolationDetail() {
             {violatorPreview || violatorImgUrl ? (
               <img
                 src={violatorPreview || violatorImgUrl}
+                alt="Violator preview"
                 className="h-40 w-full rounded-xl object-cover bg-gray-50 dark:bg-gray-800"
               />
             ) : (
@@ -600,18 +628,20 @@ export default function ViolationDetail() {
         </div>
 
         <div className="mt-4">
-          <label className={labelClass}>Notes</label>
-          <textarea
+          <label className={labelClass}>Officer Remark</label>
+          <select
             value={note}
-            onChange={(e) => setNote(e.target.value.slice(0, 500))}
-            className="w-full rounded-xl border border-gray-300 dark:border-gray-700 p-3 text-sm resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 outline-none"
+            onChange={(e) => setNote(e.target.value)}
+            className={`${inputClass} h-12 text-base`}
             style={{ WebkitTextFillColor: "currentColor" }}
-            rows={4}
-            maxLength={500}
-          />
-          <div className="text-right text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-            {note.length}/500
-          </div>
+          >
+            <option value="">Select a remark</option>
+            {NOTE_OPTIONS.filter((option) => option).map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="mt-4">
@@ -675,7 +705,9 @@ function FieldRow({
     <div className="py-3 border-b last:border-b-0 border-gray-100 dark:border-gray-800">
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
-        <div className={`text-sm text-gray-900 dark:text-gray-100 ${valueClass ?? ""}`}>{value}</div>
+        <div className={`text-sm text-gray-900 dark:text-gray-100 ${valueClass ?? ""}`}>
+          {value}
+        </div>
       </div>
     </div>
   );

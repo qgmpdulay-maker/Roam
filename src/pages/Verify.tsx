@@ -1,151 +1,152 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
 export default function Verify() {
   const nav = useNavigate();
-  const [params] = useSearchParams();
-
-  const [email, setEmail] = useState(params.get("email") || "");
+  const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
 
-  const darkInputClass =
-    "w-full rounded-2xl border border-gray-600 bg-gray-800 p-4 text-base text-white placeholder-gray-400 caret-white outline-none focus:border-orange-500";
+  const inputClass =
+    "w-full rounded-2xl border border-gray-300 bg-white p-4 text-base text-gray-900 placeholder-gray-400 caret-gray-900 outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-400 dark:caret-white";
 
   useEffect(() => {
-    const e = params.get("email");
-    if (e) setEmail(e);
-  }, [params]);
+    const savedEmail = localStorage.getItem("roam_register_email") || "";
+    if (!savedEmail) {
+      setError("Missing email. Please go back and enter your email again.");
+      return;
+    }
+    setEmail(savedEmail);
+  }, []);
 
-  async function verifyCode(e: React.FormEvent) {
+  async function handleVerify(e: React.FormEvent) {
     e.preventDefault();
-    setMsg("");
     setError("");
 
-    const eTrim = email.trim();
-    const token = code.trim();
+    const cleanCode = code.trim();
 
-    if (!eTrim) {
+    if (!email) {
       setError("Missing email. Please go back and enter your email again.");
       return;
     }
 
-    if (!/^\d{6}$/.test(token)) {
-      setError("Enter the 6-digit code from your email.");
+    if (!/^\d{6}$/.test(cleanCode)) {
+      setError("Enter the 6-digit verification code.");
       return;
     }
 
-    setLoading(true);
+    setVerifying(true);
+
     try {
-      const { error: vErr } = await supabase.auth.verifyOtp({
-        email: eTrim,
-        token,
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: cleanCode,
         type: "email",
       });
 
-      if (vErr) {
-        setError(`Invalid or expired code: ${vErr.message}`);
-        console.error("verifyOtp error:", vErr);
+      if (error) {
+        setError(error.message || "Invalid verification code.");
         return;
       }
 
-      const { data: s } = await supabase.auth.getSession();
-      if (!s.session) {
-        setError("Verified, but session not ready. Please try again.");
-        return;
-      }
-
-      setMsg("Verified! Redirecting…");
-      setTimeout(() => nav("/set-password"), 400);
+      nav("/set-password", { replace: true });
+    } catch (err) {
+      console.error(err);
+      setError("Unexpected error during verification.");
     } finally {
-      setLoading(false);
+      setVerifying(false);
     }
   }
 
-  async function resend() {
-    setMsg("");
+  async function handleResend() {
     setError("");
 
-    const eTrim = email.trim();
-    if (!eTrim) {
+    if (!email) {
       setError("Missing email. Please go back and enter your email again.");
       return;
     }
 
-    setLoading(true);
+    setResending(true);
+
     try {
-      const { error: otpErr } = await supabase.auth.signInWithOtp({
-        email: eTrim,
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+        },
       });
 
-      if (otpErr) {
-        setError(`Could not resend code: ${otpErr.message}`);
-        console.error("resend otp error:", otpErr);
-        return;
+      if (error) {
+        setError(error.message || "Failed to resend code.");
       }
-
-      setMsg("Code resent. Check inbox or spam.");
+    } catch (err) {
+      console.error(err);
+      setError("Unexpected error while resending code.");
     } finally {
-      setLoading(false);
+      setResending(false);
     }
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-gray-950 px-4">
+    <div className="min-h-screen grid place-items-center bg-gray-50 px-4 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <div className="w-full max-w-sm">
-        <h1 className="text-4xl font-bold text-orange-600 mb-2 text-center">ROAM</h1>
-        <p className="text-center text-gray-400 mb-8">Enter Verification Code</p>
+        <h1 className="mb-2 text-center text-4xl font-bold text-orange-600">
+          ROAM
+        </h1>
+        <p className="mb-2 text-center text-gray-500 dark:text-gray-400">
+          Enter the 6-digit code sent to
+        </p>
+        <p className="mb-8 text-center text-sm text-gray-700 dark:text-gray-300">
+          {email || "your email"}
+        </p>
 
         <form
-          onSubmit={verifyCode}
-          className="bg-gray-900 rounded-3xl border border-gray-800 p-6 space-y-4 shadow-sm"
+          onSubmit={handleVerify}
+          className="space-y-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900"
         >
-          {email && (
-            <p className="text-sm text-gray-400 text-center break-all">
-              Code sent to <span className="font-medium text-gray-200">{email}</span>
-            </p>
-          )}
-
           <input
+            type="text"
             inputMode="numeric"
-            placeholder="6-digit code"
-            className={darkInputClass}
-            style={{ WebkitTextFillColor: "#ffffff" }}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
             maxLength={6}
+            placeholder="6-digit code"
+            className={inputClass}
+            style={{ WebkitTextFillColor: "currentColor" }}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            required
           />
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full rounded-2xl bg-orange-600 py-3 text-white text-lg font-semibold hover:bg-orange-700 disabled:opacity-50"
+            disabled={verifying}
+            className="w-full rounded-2xl bg-orange-600 py-3 text-lg font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
           >
-            {loading ? "Verifying…" : "Verify code"}
+            {verifying ? "Verifying…" : "Verify code"}
           </button>
 
           <button
             type="button"
-            onClick={resend}
-            disabled={loading}
-            className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-3 text-white text-lg font-semibold hover:bg-gray-700 disabled:opacity-50"
+            onClick={handleResend}
+            disabled={resending}
+            className="w-full rounded-2xl border border-gray-300 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
           >
-            Resend code
+            {resending ? "Resending…" : "Resend code"}
           </button>
 
-          <button
-            type="button"
-            onClick={() => nav("/register")}
-            className="w-full rounded-2xl border border-gray-600 bg-gray-800 py-3 text-gray-200 text-base font-semibold hover:bg-gray-700"
-          >
-            ← Back to Email
-          </button>
+          {error && <p className="text-center text-sm text-red-500">{error}</p>}
 
-          {msg && <p className="text-center text-sm text-green-400">{msg}</p>}
-          {error && <p className="text-center text-sm text-red-400">{error}</p>}
+          <div className="pt-1 text-center">
+            <button
+              type="button"
+              onClick={() => nav("/register")}
+              className="text-sm text-gray-500 hover:underline dark:text-gray-400"
+            >
+              Back
+            </button>
+          </div>
         </form>
       </div>
     </div>

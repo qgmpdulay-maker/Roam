@@ -2,12 +2,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
-export default function Forgot() {
+export default function Register() {
   const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
 
   const inputClass =
     "w-full rounded-2xl border border-gray-300 bg-white p-4 text-base text-gray-900 placeholder-gray-400 caret-gray-900 outline-none focus:border-orange-500 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder-gray-400 dark:caret-white";
@@ -15,7 +14,6 @@ export default function Forgot() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    setInfo("");
 
     const cleanEmail = email.trim();
 
@@ -25,18 +23,27 @@ export default function Forgot() {
     }
 
     setSending(true);
+
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: `${window.location.origin}/reset`,
+      const { error } = await supabase.auth.signInWithOtp({
+        email: cleanEmail,
+        options: {
+          shouldCreateUser: true,
+        },
       });
 
       if (error) {
-        setError(error.message);
-      } else {
-        setInfo("A password reset link has been sent to your email.");
+        setError(error.message || "Failed to send verification code.");
+        return;
       }
-    } catch {
-      setError("Unexpected error while sending reset email.");
+
+      localStorage.setItem("roam_register_email", cleanEmail);
+      localStorage.setItem("roam_register_pending", "1");
+
+      nav("/verify-register", { replace: true });
+    } catch (err) {
+      console.error(err);
+      setError("Unexpected error while sending verification code.");
     } finally {
       setSending(false);
     }
@@ -49,7 +56,7 @@ export default function Forgot() {
           ROAM
         </h1>
         <p className="mb-8 text-center text-gray-500 dark:text-gray-400">
-          Reset your password
+          Create your account
         </p>
 
         <form
@@ -72,11 +79,10 @@ export default function Forgot() {
             disabled={sending}
             className="w-full rounded-2xl bg-orange-600 py-3 text-lg font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
           >
-            {sending ? "Sending…" : "Send reset link"}
+            {sending ? "Sending…" : "Create account"}
           </button>
 
           {error && <p className="text-center text-sm text-red-500">{error}</p>}
-          {info && <p className="text-center text-sm text-green-600">{info}</p>}
 
           <div className="pt-1 text-center">
             <button
